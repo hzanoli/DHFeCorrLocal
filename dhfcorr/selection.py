@@ -1,7 +1,8 @@
 from __future__ import print_function
-import yaml
-import pandas as pd
+
 import numpy as np
+import pandas as pd
+import yaml
 import warnings
 
 
@@ -17,7 +18,7 @@ class CutsYaml(object):
             except yaml.YAMLError as exc:
                 print(exc)
                 raise FileNotFoundError
-        if config == '' :
+        if config == '':
             raise FileNotFoundError
         self.values = config
 
@@ -95,14 +96,14 @@ def apply_cuts_pt(df, cuts, col_dict, pt_bin=None, select_in_pt_bins=True):
     Returns a list in True or False (the selection status)"""
 
     # TODO: implement range features
-    if (pt_bin == None):
+    if pt_bin is None:
         try:
             pt_bin = df.name
         except AttributeError:
             if (select_in_pt_bins):
                 pt_bin = 0
-                warning.warn("It is not possible to determine the pt bin. \
-                    The value was set to 0. You can silence this warning by setting select_in_pt_bins to False.")
+                warnings.warn('It is not possible to determine the pt bin. \
+                    The value was set to 0. You can silence this warning by setting select_in_pt_bins to False.')
             else:
                 pt_bin = 0
                 pass
@@ -140,8 +141,8 @@ def apply_part_antipart_selection(df, cuts):
     filtered_part = apply_cuts_pt(df, cuts, col_dict_part)
     filtered_anti = apply_cuts_pt(df, cuts, col_dict_anti)
 
-    df['IsSeleced' + particle_name] = filtered_part
-    df['IsSeleced' + particle_name + "bar"] = filtered_anti
+    df['IsSelected' + particle_name] = filtered_part
+    df['IsSelected' + particle_name + "bar"] = filtered_anti
 
     filtered = filtered_part | filtered_anti
 
@@ -185,6 +186,16 @@ def build_add_features_dmeson(df, cuts, dmeson_type=None):
             df[col + particle_name + 'bar'] = np.abs(df[col + particle_name + 'bar'])
         else:
             df[col] = np.abs(df[col])
+
+
+def select_inv_mass(df, part_name):
+    try:
+        particle_cand = df['InvMass' + part_name][df['IsSeleced' + part_name] == True]
+        antipart_cand = df['InvMass' + part_name + "bar"][df['IsSeleced' + part_name + 'bar'] == True]
+    except KeyError:
+        return None
+    mass_values = pd.concat([particle_cand, antipart_cand])
+    return mass_values
 
 
 def build_add_features_electron(df, cuts, e_type=None):

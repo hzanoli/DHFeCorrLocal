@@ -252,7 +252,7 @@ def plot_cuts(df_1, df_2, names_qa, col_names_map=None, cuts=None, plot_hist=Fal
             range_x = ax[1].get_xlim()
             y_max = max(ax[1].get_ylim())
 
-            if (float(selection_pt.loc[col_v]) < min(range_x)):
+            if float(selection_pt.loc[col_v]) < min(range_x):
                 ax[1].vlines(min(range_x) + 1.05(range_x[1] - range_x[0]), min(range_y), 1.05 * y_max,
                              colors=['blue'], linestyles='solid')
             else:

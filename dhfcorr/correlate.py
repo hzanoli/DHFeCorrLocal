@@ -28,7 +28,7 @@ class CorrConfig(object):
         self.style_qa = self.file['correlation_qa_style']
 
 
-def make_inv_mass(df, part_name):
+def make_inv_mass(df, part_name, suffix=''):
     """"Selects the values of the mass considering both particle and antiparticles.
     Candidates which have been selected for both cases are shown twice (as expected).
 
@@ -38,6 +38,8 @@ def make_inv_mass(df, part_name):
         Dataframe with the D mesons. Should contain the columns 'IsSelected'+part_name and 'IsSelected'+part_name+'bar'.
     part_name : str
         Name of the particle that is selected (e.g. 'D0'). It will be used to select columns in df.
+    suffix: str
+        Suffix used to modify the name of the DataFrame (e.g. '_d')
 
     Returns
     -------
@@ -50,30 +52,70 @@ def make_inv_mass(df, part_name):
     Raises
     ------
     KeyError
-        If 'IsSelected'+part_name (or 'IsSelected'+part_name+'bar') column is not found in df
+        If 'IsSelected'+part_name+suffix (or 'IsSelected'+part_name+'bar'+suffix) column is not found in df
 
     """
 
     try:
-        particle_cand = df[df['IsSelected' + part_name]]
-        antipart_cand = df[df['IsSelected' + part_name + 'bar']]
+        particle_cand = df[df['IsSelected' + part_name + suffix]]
+        antipart_cand = df[df['IsSelected' + part_name + 'bar' + suffix]]
     except KeyError:
         raise ValueError('The dataframe does not have the columns used to select the mesons')
-    mass_values = pd.concat([particle_cand['InvMass' + part_name], antipart_cand['InvMass' + part_name + 'bar']])
+    mass_values = pd.concat([particle_cand['InvMass' + part_name + suffix], antipart_cand['InvMass' + part_name + 'bar'
+                                                                                          + suffix]])
     weights = pd.concat([particle_cand['Weight'], antipart_cand['Weight']])
 
     return mass_values, weights
 
 
-def select_inv_mass(df, part_name, suffix=''):
+def select_inv_mass(df, part_name, min_mass, max_mass, suffix=''):
+    """"Select the rows of df dataframe which is its mass is between [min_mass, max_mass] and return a new DataFrame.
+    Do not return the row twice in case they are selected for both.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataframe with the D mesons. Should contain the columns 'IsSelected'+part_name+suffix and
+        'IsSelected'+part_name+'bar'+suffix.
+    part_name : str
+        Name of the particle that is selected (e.g. 'D0'). It will be used to select columns in df.
+    min_mass: float
+        Minimum value that will be selected in the mass. Do not give it in number of sigmas.
+    max_mass: float
+        Maximum value that will be selected in the mass. Do not give it in number of sigmas.
+    suffix: str
+        Suffix used to modify the name of the DataFrame (e.g. '_d')
+
+    Returns
+    -------
+    df_selected: pd.DataFrame
+        Dataframe of the selected particles. Returns a new copy.
+
+    Raises
+    ------
+    KeyError
+        If 'IsSelected'+part_name+suffix (or 'IsSelected'+part_name+'bar'+suffix) column is not found in df.
+
+    """
     try:
         particle_cand = df['IsSelected' + part_name + suffix]
-        antipart_cand = df['InvMass' + part_name + "bar" + suffix]
+        antipart_cand = df['IsSelected' + part_name + 'bar' + suffix]
+
     except KeyError as err:
         print(err)
         raise ValueError("the dataframe doe not have the columns used to select the particles")
-    mass_values = particle_cand | antipart_cand
-    return mass_values
+
+    selected_particle = ((df['InvMass' + part_name + suffix] >= min_mass)  # Check min_mass
+                         & (df['InvMass' + part_name + suffix] <= max_mass)  # Check max_mass
+                         & particle_cand)  # Check if the particle fulfils the selection for the particle
+
+    selected_antiparticle = ((df['InvMass' + part_name + 'bar' + suffix] >= min_mass)  # Check min_mass
+                             & (df['InvMass' + part_name + 'bar' + suffix] <= max_mass)  # Check max_mass
+                             & antipart_cand)  # Check if the antiparticle fulfils the selection for the antiparticle
+
+    df_selected = df[selected_particle | selected_antiparticle].copy()
+
+    return df_selected
 
 
 def plot_inv_mass_fit(fit, ax=None, **kwargs):
@@ -83,7 +125,7 @@ def plot_inv_mass_fit(fit, ax=None, **kwargs):
    ----------
    fit : ROOT.AliHFInvMassFitter
        The fit result that will be drawn
-    ax : None or plt.axes
+    ax :
         the matplotlib axes object to plot.
     **kwargs
         configuration of the plots.
@@ -158,7 +200,8 @@ def fit_inv_mass_root(histogram, config_inv_mass, config_inv_mass_def):
     config_inv_mass : dict
         Values used to configure the AliHFInvMassFitter.
     config_inv_mass_def: dict
-        Default values of config_inv_mass. In case of the the parameters in config_inv_mass is not available, it will be picked from it.
+        Default values of config_inv_mass. In case of the the parameters in config_inv_mass is not available, it will be
+         picked from it.
 
     Returns
     -------
@@ -205,22 +248,6 @@ def fit_inv_mass_root(histogram, config_inv_mass, config_inv_mass_def):
     return fit_mass
 
 
-def correlation_function(df, bins_phi, bins_eta):
-    """"Return the correlation in Eta and Phi for the particles in df.
-    returns a DataFrame with the values of the counts for each bin and another
-    one with the errors"""
-
-    # Bin in Delta Eta and Delta Phi
-    df['BinDeltaPhi'] = pd.cut(df['DeltaPhi'], bins_phi, labels=False)
-    df['BinDeltaEta'] = pd.cut(df['DeltaEta'], bins_eta, labels=False)
-
-    grouped_correlation = df.groupby(by=['BinDeltaPhi', 'BinDeltaEta'])
-    results = pd.DataFrame(grouped_correlation['Weight'].sum(), columns=['Counts'])
-    results['Error'] = np.sqrt(grouped_correlation['WeightSquare'].sum())
-
-    return results
-
-
 def prepare_to_create_pairs(df, suffix, config):
     """"Preprocessor before calculating the pairs. Takes place 'inplace' (changes df).
     Changes the names of the columns by appending the suffix.
@@ -254,29 +281,18 @@ def fill_missing_value(correlation, value_name, suffixes, bins_value, new_value=
 
     if value_name + suffixes[0] in correlation.columns:
         correlation[value_name + 'Bin'] = pd.cut(correlation[value_name + suffixes[0]], bins_value,
-                                                 include_lowest=True, labels=False)
+                                                 include_lowest=True)
         correlation[value_name + suffixes[1]] = correlation[value_name + suffixes[0]]
 
     elif value_name + suffixes[1] in correlation.columns:
         correlation[value_name + 'Bin'] = pd.cut(correlation[value_name + suffixes[1]], bins_value,
-                                                 include_lowest=True, labels=False)
+                                                 include_lowest=True)
         correlation[value_name + suffixes[0]] = correlation[value_name + suffixes[1]]
     else:
         # if no value available, save all of them to one on the bin 0
         correlation[value_name + suffixes[0]] = new_value
         correlation[value_name + suffixes[1]] = new_value
-        correlation[value_name + 'Bin'] = 0
-
-
-def create_histogram(df, config=None,
-                     variables=('CentralityBin', 'VtxZBin', 'DPtBin', 'EPtBin', 'DeltaEtaBin', 'DeltaPhiBin')):
-    grouped = df.groupby(by=list(variables))
-    counts = pd.DataFrame(grouped['Weight'].sum())
-    counts.columns = ['Content']
-    counts['SumWeightSquare'] = grouped['WeightSquare'].sum()
-    counts['Error'] = np.sqrt(counts["SumWeightSquare"])
-
-    return counts
+        correlation[value_name + 'Bin'] = pd.cut(correlation[value_name + suffixes[1]], bins_value, include_lowest=True)
 
 
 def convert_to_range(dphi):
@@ -314,8 +330,8 @@ def build_pairs(trigger, associated, config, identifier=('GridPID', 'EventNumber
     feat_on_right = [str(x) + suffixes[1] for x in identifier]
     correlation = trigger.merge(associated, left_on=feat_on_left, right_on=feat_on_right)
 
-    fill_missing_value(correlation, 'Centrality', suffixes, config['bins_cent'])
-    fill_missing_value(correlation, 'VtxZ', suffixes, config['bins_zvtx'])
+    fill_missing_value(correlation, 'Centrality', suffixes, config['bins_cent'], 1.0)
+    fill_missing_value(correlation, 'VtxZ', suffixes, config['bins_zvtx'], 1.0)
 
     # Calculate the angular differences
     correlation['DeltaPhi'] = (correlation['Phi' + suffixes[0]] - correlation['Phi' + suffixes[1]]).apply(
@@ -324,9 +340,9 @@ def build_pairs(trigger, associated, config, identifier=('GridPID', 'EventNumber
 
     # Calculate the bins for angular quantities
     correlation['DeltaPhiBin'] = pd.cut(correlation['DeltaPhi'], config['bins_phi'],
-                                        include_lowest=True, labels=False)
+                                        include_lowest=True)
     correlation['DeltaEtaBin'] = pd.cut(correlation['DeltaEta'], config['bins_eta'],
-                                        include_lowest=True, labels=False)
+                                        include_lowest=True)
 
     # Calculate the weight of the pair
     correlation['Weight'] = correlation['Weight' + suffixes[0]] * correlation['Weight' + suffixes[1]]
@@ -335,8 +351,8 @@ def build_pairs(trigger, associated, config, identifier=('GridPID', 'EventNumber
 
     # Aggregate to produce the single particle histogram
     # Use mean to aggregate (just to reduce de dimensionality)
-    trig = correlation.groupby(by=['Id' + suffixes[0]]).mean().reset_index()
-    assoc = correlation.groupby(by=['Id' + suffixes[1]]).mean().reset_index()
+    trig = correlation.groupby(by=['Id' + suffixes[0]]).nth(0).reset_index()
+    assoc = correlation.groupby(by=['Id' + suffixes[1]]).nth(0).reset_index()
 
     # Keep any column that refers to 'Bin'
     cols_to_keep = [x for x in correlation.columns if x.endswith('Bin')]

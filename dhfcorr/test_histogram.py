@@ -1,7 +1,7 @@
 from unittest import TestCase
 import pandas as pd
 import numpy as np
-from histogram import Histogram
+from .histogram import Histogram
 
 
 class TestHistogram(TestCase):
@@ -27,6 +27,28 @@ class TestHistogram(TestCase):
 
     def test_project1d(self):
         pass
+
+    def test_get_bins(self):
+        weight = [0.5, 1.0, 4.0, 10., 3., 1.5, 2.0, 5.0, 30., 5.]
+        bins = [0, 1, 2, 3, 4, 0, 1, 2, 3, 4]
+
+        data_raw = pd.DataFrame()
+        data_raw['Weight'], data_raw['WeightSquare'], data_raw['EPtBin'] = weight, list(np.array(weight) ** 2), bins
+        data_raw['EPtBin'] = pd.cut(data_raw['EPtBin'], [0, 1, 2, 3, 4])
+        h1 = Histogram.from_dataframe(data_raw, axis=['EPtBin'])
+
+        self.assertEqual(h1.get_bins('EPtBin'), [0, 1, 2, 3, 4])
+
+    def test_get_bin_center(self):
+        weight = [0.5, 1.0, 4.0, 10., 3., 1.5, 2.0, 5.0, 30., 5.]
+        bins = [0, 1, 2, 3, 4, 0, 1, 2, 3, 4]
+
+        data_raw = pd.DataFrame()
+        data_raw['Weight'], data_raw['WeightSquare'], data_raw['EPtBin'] = weight, list(np.array(weight) ** 2), bins
+        data_raw['EPtBin'] = pd.cut(data_raw['EPtBin'], [0, 1, 2, 3, 4])
+        h1 = Histogram.from_dataframe(data_raw, axis=['EPtBin'])
+
+        self.assertEqual(h1.get_bin_center('EPtBin'), [0.5, 1.5, 2.5, 3.5])
 
     def test_add(self):
         # Pseudo data to test the addition

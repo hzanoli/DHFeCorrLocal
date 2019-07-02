@@ -50,7 +50,7 @@ class QAConfig(object):
                 raise
 
         self.file = config
-        self.names_qa = self.file["qa"][name]
+        self.data = self.file["qa"][name]
 
 
 def plot_density(df, bin_values, ax, title=None, range_y=(0, 1),

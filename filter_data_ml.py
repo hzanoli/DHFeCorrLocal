@@ -6,6 +6,8 @@ import dhfcorr.data_reader as dr
 import matplotlib as mpl
 import seaborn as sns
 import pandas as pd
+import numpy as np
+from joblib import load
 
 mpl.rc('image', cmap='Reds')
 sns.set()
@@ -21,6 +23,8 @@ data_per_run = list()
 qa_file = 'default_config_local.yaml'
 config_name = 'tree_v2'
 
+bins_ml = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 10., 12., 16., np.inf]
+
 for run in run_list:
     try:
         file = sl.CutsYaml(qa_file)
@@ -32,13 +36,20 @@ for run in run_list:
 
         # TODO: CHANGE TO MESON. Requires changes in the file structure.
         d_meson = dr.load(config_name, "d_meson", run)
+
+        if d_meson is None:
+            continue
+
         sl.build_add_features_dmeson(d_meson, d_cuts)
 
         selected_e = sl.filter_in_pt_bins(ele, e_cuts, add_pt_bin_feat=True)
-        # selected_d = sl.filter_in_pt_bins(d_meson, d_cuts, add_pt_bin_feat=True)
-        selected_d = slml.select_using_ml(d_meson, 'selection_bdt.joblib', 0.124867, d_cuts)
+        d_meson['PtBinML'] = pd.cut(d_meson['Pt'], bins=bins_ml, labels=False)
+        selected_d = d_meson.groupby(by='PtBinML').apply(lambda x: slml.decision_function(x))
+        # selected_d = d_meson
+
         data_per_run.append([run, selected_e, selected_d])
-    except FileNotFoundError:
+    except FileNotFoundError as err:
+        print(err)
         print('File not found for run {0}'.format(str(run)))
 
 data_per_run = pd.DataFrame(data_per_run, columns=['run', 'electron', 'd_meson_sel'])

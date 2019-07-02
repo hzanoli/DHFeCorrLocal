@@ -177,9 +177,13 @@ def plot_inv_mass_fit(fit, ax=None, **kwargs):
     err_signif = ROOT.Double()
     fit.Significance(n_sigma, signif, err_signif)
 
+    signal = ROOT.Double()
+    err_signal = ROOT.Double()
+    fit.Signal(n_sigma, signal, err_signal)
+
     text_to_plot = 'S = {0:.0f} $\\pm$ {1:.0f} '.format(fit.GetRawYield(), fit.GetRawYieldError())
     text_to_plot += 'B ({0:.0f}$\\sigma$) = {1:.0f} $\\pm$ {2:.0f} \n'.format(n_sigma, bkg, error_bkg)
-    text_to_plot += 'S/B ({0:.0f}$\\sigma$) = {1:.4f}\n'.format(n_sigma, fit.GetRawYield() / bkg)
+    text_to_plot += 'S/B ({0:.0f}$\\sigma$) = {1:.4f}\n'.format(n_sigma, signal / bkg)
     # TODO include reflections
     # pinfos->AddText(Form("Refl/Sig =  %.3f #pm %.3f ", fRflFunc->GetParameter(0), fRflFunc->GetParError(0)));
     text_to_plot += 'Significance({0:.0f}$\\sigma$) = {1:.1f} $\\pm$ {2:.1f} \n'.format(n_sigma, signif, err_signif)
@@ -280,26 +284,38 @@ def fill_missing_value(correlation, value_name, suffixes, bins_value, new_value=
     creates a new one with values new_value. The bin is set to 0."""
 
     if value_name + suffixes[0] in correlation.columns:
-        correlation[value_name + 'Bin'] = pd.cut(correlation[value_name + suffixes[0]], bins_value,
-                                                 include_lowest=True)
+        correlation[value_name + 'Bin'] = pd.cut(correlation[value_name + suffixes[0]], bins_value)
         correlation[value_name + suffixes[1]] = correlation[value_name + suffixes[0]]
 
     elif value_name + suffixes[1] in correlation.columns:
-        correlation[value_name + 'Bin'] = pd.cut(correlation[value_name + suffixes[1]], bins_value,
-                                                 include_lowest=True)
+        correlation[value_name + 'Bin'] = pd.cut(correlation[value_name + suffixes[1]], bins_value)
         correlation[value_name + suffixes[0]] = correlation[value_name + suffixes[1]]
     else:
         # if no value available, save all of them to one on the bin 0
         correlation[value_name + suffixes[0]] = new_value
         correlation[value_name + suffixes[1]] = new_value
-        correlation[value_name + 'Bin'] = pd.cut(correlation[value_name + suffixes[1]], bins_value, include_lowest=True)
+        correlation[value_name + 'Bin'] = pd.cut(correlation[value_name + suffixes[1]], bins_value)
 
 
-def convert_to_range(dphi):
+def convert_to_range_pi2_3pi2(dphi):
     if dphi > 3. * np.pi / 2.:
         return dphi - 2. * np.pi
     if dphi < -np.pi / 2.:
         return dphi + 2. * np.pi
+    return dphi
+
+
+def convert_to_range(dphi):
+    if dphi > 3. * np.pi / 2.:
+        dphi = dphi - 2. * np.pi
+    if dphi < -np.pi / 2.:
+        dphi = dphi + 2. * np.pi
+
+    if dphi < 0.:
+        dphi = -dphi
+    if dphi > np.pi:
+        dphi = 2 * np.pi - dphi
+
     return dphi
 
 
@@ -339,10 +355,8 @@ def build_pairs(trigger, associated, config, identifier=('GridPID', 'EventNumber
     correlation['DeltaEta'] = (correlation['Eta' + suffixes[0]] - correlation['Eta' + suffixes[1]])
 
     # Calculate the bins for angular quantities
-    correlation['DeltaPhiBin'] = pd.cut(correlation['DeltaPhi'], config['bins_phi'],
-                                        include_lowest=True)
-    correlation['DeltaEtaBin'] = pd.cut(correlation['DeltaEta'], config['bins_eta'],
-                                        include_lowest=True)
+    correlation['DeltaPhiBin'] = pd.cut(correlation['DeltaPhi'], config['bins_phi'])
+    correlation['DeltaEtaBin'] = pd.cut(correlation['DeltaEta'], config['bins_eta'])
 
     # Calculate the weight of the pair
     correlation['Weight'] = correlation['Weight' + suffixes[0]] * correlation['Weight' + suffixes[1]]

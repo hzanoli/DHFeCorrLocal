@@ -1,4 +1,5 @@
 import ROOT
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -7,7 +8,7 @@ import dhfcorr.correlate as corr
 import dhfcorr.histogram as hist
 
 sns.set()
-sns.set_palette('Reds_d')
+# sns.set_palette('Reds_d')
 
 ROOT.TH1.AddDirectory(False)
 
@@ -20,6 +21,11 @@ config_corr = corr.CorrConfig()
 # This is necessary because since both D meson and electron where selected.
 # So we need to check if they are still in the same event.
 
+df_d['IsSelectedD0'] = df_d['IsSelectedD0'] > 0.1
+df_d['IsSelectedD0bar'] = df_d['IsSelectedD0bar'] > 0.1
+
+df_d = df_d[df_d['IsSelectedD0'] | df_d['IsSelectedD0bar']]
+
 pairs, selected_d, selected_e = corr.build_pairs(df_d, df_e, config_corr.correlation)
 
 histo = hist.Histogram().from_dataframe(pairs, ('CentralityBin', 'VtxZBin', 'DPtBin',
@@ -31,7 +37,6 @@ e_pt_bins = config_corr.correlation['bins_e']
 
 # Fit mass bins
 mass_fits_hist = list()
-mass_fit_obj = list()
 
 # Fit invariant mass
 fig_list = list()
@@ -41,7 +46,6 @@ correlation_bkg = list()
 
 for d_i in range(len(d_pt_bins) - 1):
     list_e = list()
-    mass_fits_e = list()
     df_list_e = list()
     correlation_signal_d = list()
     correlation_bkg_d = list()
@@ -87,16 +91,40 @@ for d_i in range(len(d_pt_bins) - 1):
         fit.Background(n_sigma, background, error_bkg)
 
         axis = ('CentralityBin', 'VtxZBin', 'DPtBin', 'EPtBin', 'DeltaEtaBin', 'DeltaPhiBin')
-        signal_corr = hist.Histogram.from_dataframe(signal, axis).project(['DeltaPhiBin', 'DeltaEtaBin'])
-        bkg_corr = hist.Histogram.from_dataframe(background, axis).project(['DeltaPhiBin', 'DeltaEtaBin'])
+        signal_corr = hist.Histogram.from_dataframe(signal, axis).project(['DeltaPhiBin'])
+        bkg_corr = hist.Histogram.from_dataframe(bkg, axis).project(['DeltaPhiBin'])
+
+        background_sidebands_1 = ROOT.Double()
+        error_bkg_sidebands_1 = ROOT.Double()
+        fit.Background(mean - 10. * sigma, mean - 4 * sigma, background_sidebands_1, error_bkg_sidebands_1)
+
+        background_sidebands_2 = ROOT.Double()
+        error_bkg_sidebands_2 = ROOT.Double()
+        fit.Background(mean + 4. * sigma, mean + 10 * sigma, background_sidebands_2, error_bkg_sidebands_2)
+
+        background_sidebands = background_sidebands_1 + background_sidebands_2
+        error_bkg_sidebands = np.sqrt(error_bkg_sidebands_1 ** 2 + error_bkg_sidebands_2 ** 2)
+
+        signal = ROOT.Double()
+        err_signal = ROOT.Double()
+        fit.Signal(n_sigma, signal, err_signal)
+
+        # normalize the background correlation
+        bkg_corr = bkg_corr / (background_sidebands / background)
+
+        ax_bkg = bkg_corr.plot1d('DeltaPhiBin', color='black')
+        signal_corr.plot1d('DeltaPhiBin', ax_bkg, color='red')
+
+        if signal > 0:
+            ax_sig = (signal_corr - bkg_corr).plot1d('DeltaPhiBin', color='blue')
+            ax_sig.set_ylim(0, 1.1 * ax_sig.get_ylim()[1])
 
         correlation_signal_d.append(signal_corr)
         correlation_bkg_d.append(bkg_corr)
 
-        # Problem in the automatic python bindings call the destructor twice. Call it manually.
+        # Problem in the automatic python bindings: the destructor is twice. Call it manually.
         del fit
 
-    mass_fit_obj.append(mass_fits_e)
     mass_fits_hist.append(list_e)
     correlation_signal.append(correlation_signal_d)
     correlation_bkg.append(correlation_bkg_d)

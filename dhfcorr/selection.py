@@ -9,18 +9,46 @@ import warnings
 class CutsYaml(object):
     """Hold the yaml file containing the configuration"""
 
-    def __init__(self, selection_file="default_config_local.yaml"):
+    def __init__(self, selection_file=None, default_file="default_config_local.yaml"):
         """Default constructor. selection_file is the yaml file with the configuration"""
-        config = ''
-        with open(selection_file, "r") as document:
+
+        # Default configuration
+        default_config = ''
+
+        with open(default_file, "r") as document:
             try:
-                config = yaml.safe_load(document)
+                default_config = yaml.safe_load(document)
             except yaml.YAMLError as exc:
                 print(exc)
-                raise FileNotFoundError
-        if config == '':
-            raise FileNotFoundError
-        self.values = config
+                raise FileNotFoundError('Default file not found or with problems. Check error above.')
+        if default_config == '':
+            raise FileNotFoundError('Empty default configuration. Check the YAML file.')
+
+        self.values = default_config
+
+        config = ''
+
+        # https://stackoverflow.com/questions/3232943/update-value-of-a-nested-dictionary-of-varying-depth
+        def update(d, u):
+            import collections
+            for k, v in u.items():
+                if isinstance(v, collections.Mapping):
+                    d[k] = update(d.get(k, {}), v)
+                else:
+                    d[k] = v
+            return d
+
+        if selection_file is not None:
+            with open(selection_file, "r") as document:
+                try:
+                    config = yaml.safe_load(document)
+                except yaml.YAMLError as exc:
+                    print(exc)
+                    raise FileNotFoundError('User configuration file not found or with problems. Check error above.')
+            if config == '':
+                raise FileNotFoundError('Empty user configuration. Check the YAML file.')
+            else:
+                update(self.values, config)
 
 
 class Cuts(object):
@@ -100,7 +128,7 @@ def apply_cuts_pt(df, cuts, col_dict, pt_bin=None, select_in_pt_bins=True):
         try:
             pt_bin = df.name
         except AttributeError:
-            if (select_in_pt_bins):
+            if select_in_pt_bins:
                 pt_bin = 0
                 warnings.warn('It is not possible to determine the pt bin. \
                     The value was set to 0. You can silence this warning by setting select_in_pt_bins to False.')
@@ -154,10 +182,10 @@ def filter_in_pt_bins(df, cuts, add_pt_bin_feat=False):
     The bins are defines as [a,b), so they include the lowest value but not the highest value."""
 
     # cut the dataframe in pt bins. The bin
-    pt_bins = pd.cut(df['Pt'], cuts.pt_bins, labels=False, right=False, include_lowest=True)
+    pt_bins = pd.cut(df['Pt'], cuts.pt_bins, labels=False, include_lowest=True)
     pass_cuts = df.groupby(by=pt_bins).apply(lambda x: apply_part_antipart_selection(x, cuts))
 
-    if (add_pt_bin_feat):
+    if add_pt_bin_feat:
         df['PtBin'] = pt_bins
         df.set_index([df['PtBin'], df.index], inplace=True)
         df.sort_index(inplace=True)
@@ -190,8 +218,8 @@ def build_add_features_dmeson(df, cuts, dmeson_type=None):
 
 def select_inv_mass(df, part_name):
     try:
-        particle_cand = df['InvMass' + part_name][df['IsSeleced' + part_name] == True]
-        antipart_cand = df['InvMass' + part_name + "bar"][df['IsSeleced' + part_name + 'bar'] == True]
+        particle_cand = df['InvMass' + part_name][df['IsSeleced' + part_name]]
+        antipart_cand = df['InvMass' + part_name + "bar"][df['IsSeleced' + part_name + 'bar']]
     except KeyError:
         return None
     mass_values = pd.concat([particle_cand, antipart_cand])

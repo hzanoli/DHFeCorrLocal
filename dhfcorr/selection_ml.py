@@ -6,18 +6,8 @@ import pandas as pd
 import dhfcorr.selection as sl
 
 
-def select_using_ml(df, file_name, threshold, cuts):
-    particle_name = cuts.particle_name
-
+def select_using_ml(df, file_name, cuts):
     model = load(file_name)
-
-    variables_part = ['Pt', 'Eta', 'NormDecayLengthXY', 'CosP', 'CosPXY', 'ImpParXY', 'DCA', 'Normd0MeasMinusExp',
-                      'PtDaughter0', 'PtDaughter1', 'ReducedChi2', 'D0Prod', 'CosTsD0', 'PIDD0',
-                      'D0Daughter0', 'D0Daughter1']
-
-    variables_anti = ['Pt', 'Eta', 'NormDecayLengthXY', 'CosP', 'CosPXY', 'ImpParXY', 'DCA', 'Normd0MeasMinusExp',
-                      'PtDaughter1', 'PtDaughter0', 'ReducedChi2', 'D0Prod', 'CosTsD0bar', 'PIDD0bar',
-                      'D0Daughter1', 'D0Daughter0']
 
     part = df[variables_part]
     anti_part = df[variables_anti]
@@ -52,23 +42,7 @@ def decision_function(df, base_file_name='bdt_'):
     return df
 
 
-def fill_response_h2o(df, base_file_name='xgboost/pt_', select_in_pt_bins=True):
-    import h2o
-    h2o.init()
 
-    try:
-        pt_bin = df.name
-    except AttributeError:
-        if select_in_pt_bins:
-            raise ValueError('It is not possible to determine the pt bin.  ')
-        else:
-            pt_bin = ''
-            pass
-
-    frame = h2o.H2OFrame.from_python(df)
-    saved_model = h2o.load_model(base_file_name + str(pt_bin))
-
-    return saved_model.predict(frame).as_data_frame()
 
 
 def col_names_for_particles(df, particle_name, particle_dependent_variables):
@@ -105,11 +79,11 @@ def invert_daughters(df, filter=False):
         df.drop('temp', axis='columns', inplace=True)
 
 
-def duplicate_candidates(df_part, d_cuts,
-                         bins=(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 10., 12., 16., np.inf)):
-    if df_part is None:
+def duplicate_candidates(df, d_cuts):
+    if df is None:
         return None
 
+    df_part = df.copy()
     df_part['ID'] = df_part.index
     # build additional features
     particle_name = d_cuts.particle_name

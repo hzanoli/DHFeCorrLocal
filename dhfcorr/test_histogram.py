@@ -1,7 +1,7 @@
 from unittest import TestCase
 import pandas as pd
 import numpy as np
-from .histogram import Histogram
+from dhfcorr.histogram import Histogram
 
 
 class TestHistogram(TestCase):
@@ -26,6 +26,7 @@ class TestHistogram(TestCase):
         pd.testing.assert_frame_equal(histogram_to_test.data, data_binned)
 
     def test_project1d(self):
+        # TODO: implement the projection unittest
         pass
 
     def test_get_bins(self):

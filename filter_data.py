@@ -22,24 +22,24 @@ qa_file = 'default_config_local.yaml'
 config_name = 'tree_v2'
 
 for run in run_list:
-    try:
-        file = sl.CutsYaml(qa_file)
-        e_cuts = sl.Cuts(file, 'electron')
-        d_cuts = sl.Cuts(file, 'D0')
 
-        ele = dr.load(config_name, "electron", run)
-        sl.build_add_features_electron(ele, e_cuts)
+    file = sl.CutsYaml(qa_file)
+    e_cuts = sl.Cuts(file, 'electron')
+    d_cuts = sl.Cuts(file, 'D0')
 
-        # TODO: CHANGE TO MESON. Requires changes in the file structure.
-        d_meson = dr.load(config_name, "d_meson", run)
-        sl.build_add_features_dmeson(d_meson, d_cuts)
+    ele = dr.load(config_name, "electron", run)
+    # sl.build_add_features_electron(ele, e_cuts)
 
-        selected_e = sl.filter_in_pt_bins(ele, e_cuts, add_pt_bin_feat=True)
-        # selected_d = sl.filter_in_pt_bins(d_meson, d_cuts, add_pt_bin_feat=True)
-        selected_d = slml.select_using_ml(d_meson, 'selection_bdt.joblib', 0.124867, d_cuts)
-        data_per_run.append([run, selected_e, selected_d])
-    except FileNotFoundError:
-        print('File not found for run {0}'.format(str(run)))
+    # TODO: CHANGE TO MESON. Requires changes in the file structure.
+    d_meson = dr.load(config_name, "d_meson", run)
+    if (d_meson is None) or (ele is None):
+        continue
+    # sl.build_add_features_dmeson(d_meson, d_cuts)
+
+    selected_e = sl.filter_in_pt_bins(ele, e_cuts, add_pt_bin_feat=True)
+    selected_d = sl.filter_in_pt_bins(d_meson, d_cuts, add_pt_bin_feat=True)
+    # selected_d = slml.select_using_ml(d_meson, 'selection_bdt.joblib', 0.124867, d_cuts)
+    data_per_run.append([run, selected_e, selected_d])
 
 data_per_run = pd.DataFrame(data_per_run, columns=['run', 'electron', 'd_meson_sel'])
 

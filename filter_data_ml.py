@@ -23,7 +23,7 @@ data_per_run = list()
 qa_file = 'default_config_local.yaml'
 config_name = 'tree_v2'
 
-bins_ml = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 10., 12., 16., np.inf]
+bins_ml = [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 10., 12., 16., np.inf]
 
 for run in run_list:
     try:
@@ -34,7 +34,6 @@ for run in run_list:
         ele = dr.load(config_name, "electron", run)
         sl.build_add_features_electron(ele, e_cuts)
 
-        # TODO: CHANGE TO MESON. Requires changes in the file structure.
         d_meson = dr.load(config_name, "d_meson", run)
 
         if d_meson is None:

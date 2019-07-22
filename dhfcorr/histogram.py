@@ -15,23 +15,41 @@ class Histogram:
     range: pd.DataFrame
         This holds a view of data taking into consideration the ranges requested by the user.
         This range is used only for projections, all other operations (sum, multiplication etc) take place in data.
+        #TODO: Methods to implement the range selection
     """
 
     def __init__(self, df=None):
-        """" Default constructor. This is used mostly internally and it should be avoided. Use from_dataframe in case
-        you would like to create from a DataFrame that was already binned.
+        """" Default constructor.
+
+        This is used mostly internally or as a copy constructor. Use from_dataframe in case
+        you would like to create from a DataFrame that was already binned or from_dataframe_cut if it is not binned.
+
+        Parameters
+        ----------
+        df : Histogram or pd.DataFrame or None
+            DataFrame with the values which will be used to calculate the histogram.
+
         """
 
-        if df is None:
+        if isinstance(df, Histogram):
+            self.data = df.data.copy()
+        elif df is None:
             self.data = pd.DataFrame(None, columns=['Content', 'SumWeightSquare', 'Error'])
-        else:
+        elif isinstance(df, pd.DataFrame):
             self.data = df.copy()  # copies to ensure that the new Histogram does not share the same DataFrame
+        else:
+            raise TypeError('The DataFrame should be pd.DataFrame, Histogram or None.')
 
+        # Check if the content of the histogram is consistent
         if 'Content' not in self.data.columns or 'SumWeightSquare' not in self.data.columns:
             raise ValueError('The DataFrame passed does not have the Content, SumWeightSquare or Error')
 
         if 'Error' not in self.data.columns:
             self.data['Error'] = np.sqrt(self.data['SumWeightSquare'])
+
+        cols_to_drop = [x for x in self.data.columns if x not in ['Content', 'Error', 'SumWeightSquare']]
+        self.data.drop(labels=cols_to_drop, axis='columns', inplace=True)
+
         self.range = self.data  # range should be just a view of self.data
 
     @staticmethod
@@ -44,7 +62,7 @@ class Histogram:
         df : pd.DataFrame
             DataFrame with the values which will be used to calculate the histogram.
 
-        axis: tuple
+        axis: tuple or list
             The features which will aggregated in the histogram (which one is a different 'axis'). The features should
             have been binned before passing df to this function
 
@@ -53,19 +71,19 @@ class Histogram:
         Histogram
             A new histogram with df
         """
-        # TODO add possibility to bin from this point or in other function
 
         if not isinstance(df, pd.DataFrame):
-            raise ValueError('df should be a DataFrame')
+            raise TypeError('df should be a DataFrame')
 
-        df = df.copy()
+        df_local = df.copy()
 
-        if 'Weight' not in df.columns:
-            df['Weight'] = 1.0
+        if 'Weight' not in df_local.columns:
+            df_local['Weight'] = 1.0
 
-        df['WeightSquare'] = df['Weight'] ** 2
+        df_local['WeightSquare'] = df_local['Weight'] ** 2
 
-        grouped = df.groupby(by=list(axis))
+        grouped = df_local.groupby(by=list(axis))
+
         # Counts are the sum of the Weights
         counts = pd.DataFrame(grouped['Weight'].sum())
 
@@ -96,12 +114,15 @@ class Histogram:
         Histogram
             This histogram a new histogram object
         """
-        df = df.copy()
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError('df should be a DataFrame')
+
+        df_local = df.copy()
 
         for key, values in axis_and_bins.items():
-            df[key] = pd.cut(df[key], bins=values)
+            df_local[key] = pd.cut(df[key], bins=values)
 
-        return Histogram.from_dataframe(df, axis_and_bins.keys())
+        return Histogram.from_dataframe(df_local, axis_and_bins.keys())
 
     def from_range(self):
         """Create a new n-dimensional histogram from the current histogram using the range defined by the user using
@@ -245,7 +266,7 @@ class Histogram:
 
         if isinstance(other, Histogram):
             if not self.data.index.equals(other.data.index):
-                raise ValueError("The axis of the histograms do not match.")
+                raise ValueError("The axis of the histograms do not match. You can create a range if necessary.")
 
             new_df = self.data.copy()
 
@@ -292,7 +313,7 @@ class Histogram:
             return Histogram(new_df)
 
     def plot1d(self, axis, ax=None, plot_type='error_bar', label='', norm_hist=False, **kwargs):
-        """ Plot the histogram in one dimension. Uses matplotlib errorbar or bar.
+        """ Plot the histogram in one dimension. Uses matplotlib errorbar or bar or bar.
 
         Parameters
         ----------
@@ -319,9 +340,9 @@ class Histogram:
         if ax is None:
             fig, ax = plt.subplots()
 
-        x = self.get_bin_center(axis)
-        y = self.range['Content']
-        y_err = self.range['Error']
+        x = np.array(self.get_bin_center(axis))
+        y = np.array(self.range['Content'])
+        y_err = np.array(self.range['Error'])
         x_err = np.array(self.get_bin_width(axis)) / 2
 
         if norm_hist:
@@ -367,16 +388,18 @@ class Histogram:
         else:
             return Histogram((self / self.data['Content'].sum()).data)
 
-    def cumsum(self, inverse=False, inplace=False):
+    def cumsum(self, axis=None, reverse_order=False, inplace=False):
         """ Calculate the cumulative sum of the bin contents. The uncertainties are propagated using the the cumulative
         sum of the sum of the squared weight
 
         Parameters
         ----------
-        inverse: bool
+        axis: str or NOne
+            Name of the axis that will be summed. If none,
+        reverse_order: bool
             If true, the cumulative sum is performed from the last to the first bin
         inplace: bool
-            If true, the current histogram is modified.
+            If true, the current histogram is modified. If there are axis is provided, inplace is ignored
 
 
         Returns
@@ -384,15 +407,23 @@ class Histogram:
         self : Histogram
             the current histogram or the new histogram (i
         """
+        if axis is not None:
+            if not isinstance(axis, str):
+                raise TypeError('Cumsum is only possible in one axis.')
+        elif isinstance(axis, str):
+            return self.project(axis).cumsum(axis=None, reverse_order=reverse_order, inplace=True)
 
         if inplace:
-            self.data['Content'] = self.data['Content'].cumsum()
-            self.data['SumWeightSquare'] = self.data['SumWeightSquare'].cumsum()
+            if reverse_order:
+                self.data['Content'] = np.cumsum(self.data['Content'].values[::-1])[::-1]
+                self.data['SumWeightSquare'] = np.cumsum(self.data['SumWeightSquare'].values[::-1])[::-1]
+
+            else:
+                self.data['Content'] = self.data['Content'].cumsum()
+                self.data['SumWeightSquare'] = self.data['SumWeightSquare'].cumsum()
+
             self.data['Error'] = np.sqrt(self.data['SumWeightSquare'])
 
             return self
         else:
-            return Histogram((self / self.data['Content'].sum()).data)
-
-
-from_dataframe = staticmethod(Histogram.from_dataframe)
+            return Histogram(self).cumsum(reverse_order=reverse_order, inplace=True)

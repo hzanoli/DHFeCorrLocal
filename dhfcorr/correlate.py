@@ -123,10 +123,12 @@ def plot_inv_mass_fit(fit, ax=None, **kwargs):
 
    Parameters
    ----------
-   fit : ROOT.AliHFInvMassFitter
-       The fit result that will be drawn
-    ax :
-        the matplotlib axes object to plot.
+
+
+    fit: ROOT.AliHFInvMassFitter
+        The fit result that will be drawn
+
+    ax : None or plt.axes
     **kwargs
         configuration of the plots.
 
@@ -151,6 +153,7 @@ def plot_inv_mass_fit(fit, ax=None, **kwargs):
     bins_width = [histogram.GetXaxis().GetBinWidth(i) for i in range(1, histogram.GetNbinsX() + 1)]
 
     # Plot hist
+
     if kwargs['x_range'][0] > kwargs['x_range'][1]:
         raise ValueError("Minimum value (x axis) in the mass plots is larger than the maximum value")
 
@@ -194,7 +197,8 @@ def plot_inv_mass_fit(fit, ax=None, **kwargs):
     return ax
 
 
-def fit_inv_mass_root(histogram, config_inv_mass, config_inv_mass_def):
+def fit_inv_mass_root(histogram, config_inv_mass, config_inv_mass_def,
+                      fix_mean=None, fix_sigma=None):
     """"Fits the invariant mass distribution using AliHFInvMassFitter.
 
     Parameters
@@ -202,10 +206,15 @@ def fit_inv_mass_root(histogram, config_inv_mass, config_inv_mass_def):
     histogram : ROOT.TH1
         The histogram that will be fitted.
     config_inv_mass : dict
-        Values used to configure the AliHFInvMassFitter.
+        Values used to configure the AliHFInvMassFitter. Should containt: range (the range that the fit will be
+        performed), bkg_func and sig_func(the function used to fit the data, as defined in AliHFInvMassFitter.h)
     config_inv_mass_def: dict
         Default values of config_inv_mass. In case of the the parameters in config_inv_mass is not available, it will be
          picked from it.
+    fix_mean: None or float
+        In case it is not None, the fit will fix the mean to this value.
+    fix_sigma: None or float
+        In case it is not None, the fit will fix the standard deviation to this value.
 
     Returns
     -------
@@ -215,7 +224,8 @@ def fit_inv_mass_root(histogram, config_inv_mass, config_inv_mass_def):
     Raises
     ------
     KeyError
-        If the keywords (range, ) used to configure the AliHFInvMassFitter are not found on config_inv_mass.
+        If the keywords (range, bkg_func, sig_func) used to configure the AliHFInvMassFitter are not found on
+        config_inv_mass or config_inv_mass_def.
     ValueError
         In case the one of the configurations in config_inv_mass (or config_inv_mass_def) is not consistent.
 
@@ -247,12 +257,25 @@ def fit_inv_mass_root(histogram, config_inv_mass, config_inv_mass_def):
         raise
 
     fit_mass = ROOT.AliHFInvMassFitter(histogram, minimum, maximum, bkg_func, sig_func)
+
+    if fix_mean is not None:
+        if not isinstance(fix_mean, float):
+            raise TypeError('The value to fix the mean should be a float')
+
+        fit_mass.SetFixGaussianMean(fix_mean)
+
+    if fix_sigma is not None:
+        if not isinstance(fix_sigma, float):
+            raise TypeError('The value to fix the standard deviation should be a float')
+
+        fit_mass.SetFixGaussianSigma(fix_sigma)
+
     fit_mass.MassFitter(False)
 
     return fit_mass
 
 
-def prepare_to_create_pairs(df, suffix, config):
+def prepare_single_particle_df(df, suffix, **kwargs):
     """"Preprocessor before calculating the pairs. Takes place 'inplace' (changes df).
     Changes the names of the columns by appending the suffix.
     Adds values for weights in case they are not available.
@@ -273,7 +296,7 @@ def prepare_to_create_pairs(df, suffix, config):
 
     # Create the bins for each particle
     prefix = suffix[1:].upper()
-    df[prefix + 'PtBin'] = pd.cut(df['Pt' + suffix], config['bins' + str(suffix)], include_lowest=True, labels=False)
+    df[prefix + 'PtBin'] = pd.cut(df['Pt' + suffix], kwargs['bins' + str(suffix)])
 
     return list(cols_original), list(cols_new)
 
@@ -291,7 +314,7 @@ def fill_missing_value(correlation, value_name, suffixes, bins_value, new_value=
         correlation[value_name + 'Bin'] = pd.cut(correlation[value_name + suffixes[1]], bins_value)
         correlation[value_name + suffixes[0]] = correlation[value_name + suffixes[1]]
     else:
-        # if no value available, save all of them to one on the bin 0
+        # if no value available, save all of them to one on the bin new_value
         correlation[value_name + suffixes[0]] = new_value
         correlation[value_name + suffixes[1]] = new_value
         correlation[value_name + 'Bin'] = pd.cut(correlation[value_name + suffixes[1]], bins_value)
@@ -319,7 +342,7 @@ def convert_to_range(dphi):
     return dphi
 
 
-def build_pairs(trigger, associated, config, identifier=('GridPID', 'EventNumber'), suffixes=('_d', '_e')):
+def build_pairs(trigger, associated, suffixes=('_d', '_e'), identifier=('GridPID', 'EventNumber'), **kwargs):
     """"Builds a DataFrame with pairs of trigger and associated particles.
 
     identifier should have be present in both trigger and associated.
@@ -331,23 +354,51 @@ def build_pairs(trigger, associated, config, identifier=('GridPID', 'EventNumber
 
     Returns a dataframe with the pairs, other one with the triggers and another one with the associated
     It is more convenient to use the pairs to build correlations and the individual for normalizations (and for mixing).
+
+
+    Parameters
+    ----------
+    trigger : pd.Dataframe
+        DataFrame with the trigger particles
+    associated : pd.Dataframe
+        DataFrame with associated particles
+    suffixes:
+    identifier:
+    kwargs : dict
+        Information
+
+    Returns
+    -------
+    fit_mass : ROOT.AliHFInvMassFitter
+        The fit mass object for this histogram
+
+    Raises
+    ------
+
     """
+
+    # Type check
+
+    if not isinstance(trigger, pd.DataFrame):
+        raise TypeError('Value passed for trigger is not a DataFrame')
+    if not isinstance(associated, pd.DataFrame):
+        raise TypeError('Value passed for assoc is not a DataFrame')
 
     # Copy the DataFrames to avoid changing the original ones
     trigger = trigger.copy()
     associated = associated.copy()
 
     # Prepare the features and add possible missing ones. trigger_cols_old is not used in current implementation
-    trigger_cols_old, trigger_cols_new = prepare_to_create_pairs(trigger, suffixes[0], config)
-    assoc_cols_old, assoc_cols_new = prepare_to_create_pairs(associated, suffixes[1], config)
+    trigger_cols_old, trigger_cols_new = prepare_single_particle_df(trigger, suffixes[0], **kwargs)
+    assoc_cols_old, assoc_cols_new = prepare_single_particle_df(associated, suffixes[1], **kwargs)
 
     # Build the correlation pairs
     feat_on_left = [str(x) + suffixes[0] for x in identifier]
     feat_on_right = [str(x) + suffixes[1] for x in identifier]
     correlation = trigger.merge(associated, left_on=feat_on_left, right_on=feat_on_right)
 
-    fill_missing_value(correlation, 'Centrality', suffixes, config['bins_cent'], 1.0)
-    fill_missing_value(correlation, 'VtxZ', suffixes, config['bins_zvtx'], 1.0)
+    fill_missing_value(correlation, 'Centrality', suffixes, kwargs['bins_cent'], 1.0)
+    fill_missing_value(correlation, 'VtxZ', suffixes, kwargs['bins_zvtx'], 1.0)
 
     # Calculate the angular differences
     correlation['DeltaPhi'] = (correlation['Phi' + suffixes[0]] - correlation['Phi' + suffixes[1]]).apply(
@@ -355,8 +406,8 @@ def build_pairs(trigger, associated, config, identifier=('GridPID', 'EventNumber
     correlation['DeltaEta'] = (correlation['Eta' + suffixes[0]] - correlation['Eta' + suffixes[1]])
 
     # Calculate the bins for angular quantities
-    correlation['DeltaPhiBin'] = pd.cut(correlation['DeltaPhi'], config['bins_phi'])
-    correlation['DeltaEtaBin'] = pd.cut(correlation['DeltaEta'], config['bins_eta'])
+    correlation['DeltaPhiBin'] = pd.cut(correlation['DeltaPhi'], kwargs['bins_phi'])
+    correlation['DeltaEtaBin'] = pd.cut(correlation['DeltaEta'], kwargs['bins_eta'])
 
     # Calculate the weight of the pair
     correlation['Weight'] = correlation['Weight' + suffixes[0]] * correlation['Weight' + suffixes[1]]
@@ -364,7 +415,7 @@ def build_pairs(trigger, associated, config, identifier=('GridPID', 'EventNumber
     correlation['WeightSquare'] = correlation['Weight'] ** 2
 
     # Aggregate to produce the single particle histogram
-    # Use mean to aggregate (just to reduce de dimensionality)
+    # Use the first entry, since they are all repeated
     trig = correlation.groupby(by=['Id' + suffixes[0]]).nth(0).reset_index()
     assoc = correlation.groupby(by=['Id' + suffixes[1]]).nth(0).reset_index()
 

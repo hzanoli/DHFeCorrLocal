@@ -149,8 +149,9 @@ def apply_cuts_pt(df, cuts, col_dict, pt_bin=None, select_in_pt_bins=True):
         filtered = filtered & selected_condition
 
     for feat in cuts.bool_features:
-        selected_condition = df[col_dict[feat]] == bool(selection_pt.loc[feat])
-        filtered = filtered & selected_condition
+        if bool(selection_pt.loc[feat]):  # Use only if True, if False ignore (does not apply the cut)
+            selected_condition = df[col_dict[feat]] == bool(selection_pt.loc[feat])
+            filtered = filtered & selected_condition
 
     return filtered
 
@@ -200,13 +201,14 @@ def build_add_features_dmeson(df, cuts, dmeson_type=None):
     particle_mass = cuts.particle_mass
     particle_name = cuts.particle_name
 
-    df['D0Prod'] = df['D0Daughter1'] * df['D0Daughter0']
+    # df['D0Prod'] = df['D0Daughter1'] * df['D0Daughter0']
+    df['DeltaM'] = df['InvMass'] - particle_mass
 
-    df['DeltaM' + particle_name] = df['InvMass' + particle_name] - particle_mass
-    df['DeltaM' + particle_name + 'bar'] = df['InvMass' + particle_name + 'bar'] - particle_mass
+    # df['DeltaM' + particle_name] = df['InvMass' + particle_name] - particle_mass
+    # df['DeltaM' + particle_name + 'bar'] = df['InvMass' + particle_name + 'bar'] - particle_mass
 
-    df['PID' + particle_name] = (df['SelectionStatus'] == 1) | (df['SelectionStatus'] == 3)
-    df['PID' + particle_name + 'bar'] = (df['SelectionStatus'] == 2) | (df['SelectionStatus'] == 3)
+    # df['PID' + particle_name] = (df['SelectionStatus'] == 1) | (df['SelectionStatus'] == 3)
+    # df['PID' + particle_name + 'bar'] = (df['SelectionStatus'] == 2) | (df['SelectionStatus'] == 3)
 
     for col in cuts.features_absolute:
         if col in cuts.part_dep_cuts:

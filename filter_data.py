@@ -1,3 +1,4 @@
+import dhfcorr.config_yaml
 import dhfcorr.selection as sl
 import dhfcorr.selection_ml as slml
 
@@ -23,7 +24,7 @@ config_name = 'tree_v2'
 
 for run in run_list:
 
-    file = sl.CutsYaml(qa_file)
+    file = dhfcorr.config_yaml.ConfigYaml(qa_file)
     e_cuts = sl.Cuts(file, 'electron')
     d_cuts = sl.Cuts(file, 'D0')
 

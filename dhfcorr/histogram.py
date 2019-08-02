@@ -135,9 +135,6 @@ class Histogram:
         """
         return Histogram(self.range)
 
-    def set_range(self):
-        pass
-
     def get_bins(self, axis):
         """Returns the bins for axis
 

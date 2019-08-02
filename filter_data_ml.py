@@ -1,3 +1,4 @@
+import dhfcorr.config_yaml
 import dhfcorr.selection as sl
 import dhfcorr.selection_ml as slml
 
@@ -27,7 +28,7 @@ bins_ml = [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 10., 12., 16., np.inf]
 
 for run in run_list:
     try:
-        file = sl.CutsYaml(qa_file)
+        file = dhfcorr.config_yaml.ConfigYaml(qa_file)
         e_cuts = sl.Cuts(file, 'electron')
         d_cuts = sl.Cuts(file, 'D0')
 

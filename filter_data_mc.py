@@ -1,3 +1,4 @@
+import dhfcorr.config_yaml
 import dhfcorr.data_reader as dr
 import dhfcorr.selection as sl
 
@@ -7,7 +8,7 @@ def root_to_h5(config_file='default_config_local.yaml'):
     run_list = ['all']
     config = "mc_d_mesons"
 
-    file = sl.CutsYaml(config_file)
+    file = dhfcorr.config_yaml.ConfigYaml(config_file)
     e_cuts = sl.Cuts(file, 'electron')
     d_cuts = sl.Cuts(file, 'D0')
 

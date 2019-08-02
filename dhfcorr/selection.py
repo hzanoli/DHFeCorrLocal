@@ -2,53 +2,7 @@ from __future__ import print_function
 
 import numpy as np
 import pandas as pd
-import yaml
 import warnings
-
-
-class CutsYaml(object):
-    """Hold the yaml file containing the configuration"""
-
-    def __init__(self, selection_file=None, default_file="default_config_local.yaml"):
-        """Default constructor. selection_file is the yaml file with the configuration"""
-
-        # Default configuration
-        default_config = ''
-
-        with open(default_file, "r") as document:
-            try:
-                default_config = yaml.safe_load(document)
-            except yaml.YAMLError as exc:
-                print(exc)
-                raise FileNotFoundError('Default file not found or with problems. Check error above.')
-        if default_config == '':
-            raise FileNotFoundError('Empty default configuration. Check the YAML file.')
-
-        self.values = default_config
-
-        config = ''
-
-        # https://stackoverflow.com/questions/3232943/update-value-of-a-nested-dictionary-of-varying-depth
-        def update(d, u):
-            import collections
-            for k, v in u.items():
-                if isinstance(v, collections.Mapping):
-                    d[k] = update(d.get(k, {}), v)
-                else:
-                    d[k] = v
-            return d
-
-        if selection_file is not None:
-            with open(selection_file, "r") as document:
-                try:
-                    config = yaml.safe_load(document)
-                except yaml.YAMLError as exc:
-                    print(exc)
-                    raise FileNotFoundError('User configuration file not found or with problems. Check error above.')
-            if config == '':
-                raise FileNotFoundError('Empty user configuration. Check the YAML file.')
-            else:
-                update(self.values, config)
 
 
 class Cuts(object):
@@ -70,9 +24,13 @@ class Cuts(object):
     def n_ptbins(self):
         return int(len(self.pt_bins) - 1)
 
-    def __init__(self, yaml_file, particle='D0'):
+    def __init__(self, yaml_config, particle='D0'):
         """Default constructor. yaml_file should come from the class CutsYaml. The particle is set as Default to D0 """
-        d_meson_cuts = yaml_file.values[particle]['cuts']
+        try:
+            d_meson_cuts = yaml_config.values[particle]['cuts']
+        except KeyError as key_error:
+            print("The particle " + str(particle) + " cuts were not found. The error raised is:")
+            print(key_error)
 
         # Save the cuts to a DataFrame
         self.cut_df = pd.DataFrame(d_meson_cuts).apply(pd.to_numeric, errors='ignore')
@@ -96,10 +54,10 @@ class Cuts(object):
 
         # Define basic selection variable types
         self.pt_bins = list(min_pt) + list([max_pt[-1]])
-        self.part_dep_cuts = tuple(yaml_file.values[particle]['particle_dependent_variables'])
-        self.particle_mass = float(yaml_file.values[particle]['particle_mass'])
-        self.particle_name = str(yaml_file.values[particle]['particle_name'])
-        self.features_absolute = tuple(yaml_file.values[particle]['features_abs'])
+        self.part_dep_cuts = tuple(yaml_config.values[particle]['particle_dependent_variables'])
+        self.particle_mass = float(yaml_config.values[particle]['particle_mass'])
+        self.particle_name = str(yaml_config.values[particle]['particle_name'])
+        self.features_absolute = tuple(yaml_config.values[particle]['features_abs'])
 
 
 def feature_dict(cuts, name):

@@ -4,8 +4,8 @@ import numpy as np
 
 class Histogram:
     """Histogram class.
-    Errors are calculated as the square root of the sum of the square
-    of the weights. The Sum of the squared weights is kept in each bin.
+    Errors are calculated as the square root of the sum of the square of the weights. The Sum of the squared weights
+    is kept in each bin.
 
     Attributes
     ----------
@@ -123,6 +123,38 @@ class Histogram:
             df_local[key] = pd.cut(df[key], bins=values)
 
         return Histogram.from_dataframe(df_local, axis_and_bins.keys())
+
+    @staticmethod
+    def from_root(root_hist):
+        # TODO: finish implementation
+        try:
+            import ROOT
+        except ModuleNotFoundError:
+            raise (ModuleNotFoundError, 'ROOT is needed to use from_root. Please be sure that it can be imported.')
+
+        if not isinstance(root_hist, ROOT.TH1):
+            raise (TypeError, 'ROOT histogram should be derive from TH1. Please check the histogram passed.')
+
+        axis = (root_hist.GetXaxis())
+        if isinstance(root_hist, ROOT.TH2):
+            axis.append(root_hist.GetYaxis())
+        elif isinstance(root_hist, ROOT.TH3):
+            axis.append(root_hist.GetYaxis(), root_hist.GetZaxis())
+
+        axis_names = list()
+        axis_bins = list()
+        axis_counts = list()
+        axis_errors = list()
+
+        for ax, i in zip(axis, range(len(axis))):
+            if ax.GetTitle() == '':  # Add the number of the axis in case no title is available
+                axis_names.append(str(i))
+            else:
+                axis_names.append(ax.GetTitle())
+
+            bins = [ax.GetBinLowEdge(i) for i in range(ax.GetNbins())]
+            bins.append(ax.GetBinUpEdge(ax.GetNbins()))
+            axis_bins.append(bins)
 
     def from_range(self):
         """Create a new n-dimensional histogram from the current histogram using the range defined by the user using

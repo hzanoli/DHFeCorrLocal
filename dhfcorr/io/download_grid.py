@@ -16,7 +16,7 @@ def download_file(grid_path, local_path):
 
 
 def download_opt(username, runs, grid_folder, local_folder, is_data=True, file_name='AnalysisResults.root'):
-    if isinstance(runs, (int, float)):
+    if isinstance(runs, (int, float, str)):
         runs = [runs]
     else:
         try:

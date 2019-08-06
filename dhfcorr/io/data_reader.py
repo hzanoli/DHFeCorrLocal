@@ -46,9 +46,8 @@ tree_name : dict
 
 """
 
-
-from __future__ import print_function
 import warnings
+import pandas as pd
 
 try:
     import ROOT
@@ -56,11 +55,9 @@ try:
 except ModuleNotFoundError:
     warnings.warn("ROOT is not installed. Only pandas interface will work.", RuntimeWarning)
 
-import pandas as pd
-
 tree_name = dict({'electron': 'electron', 'dmeson': 'dmeson'})
 
-storage_location = "data/"
+storage_location = "/Users/hzanoli/cernbox/postdoc/DHFeCorrLocal/data/"
 base_folder_name = "DHFeCorrelation_"
 
 
@@ -90,13 +87,6 @@ def convert_to_pandas(file_name, folder_name, tree_name_local, branch=None):
         df = pd.DataFrame(root_numpy.tree2array(tree, branches=branch))
     else:
         df = pd.DataFrame(root_numpy.tree2array(tree))
-
-    # temporary solution to rename the InvMass
-    df.columns = ["InvMassD0" if x == "InvMass" else x for x in df.columns]
-    df.columns = ["InvMassD0bar" if x == "InvMassAnti" else x for x in df.columns]
-
-    df['GridPID'] = df['GridPID']
-    df['GridPID'] = pd.to_numeric(df['GridPID'], downcast='integer')
 
     file_root.Close()
     return df
@@ -160,7 +150,7 @@ def save(df, configuration_name, particle, run_number):
                   index=False)
 
 
-def load(configuration_name, particle, run_number):
+def load(configuration_name, particle, run_number=None):
     """Loads the dataset from the default storage location. If run_number is a list, all the runs in the list will be
     merged.
 
@@ -173,8 +163,8 @@ def load(configuration_name, particle, run_number):
     particle: str
         The particle name, such as ``electron` or ``dmeson``. The same name that was used to save it.
 
-    run_number: str
-        This is a unique identifier for each file. Usually the run number is used.
+    run_number: str or None
+        This is a unique identifier for each file. Usually the run number is used. If None, all files will be loaded
 
     Warnings
     ----------
@@ -190,12 +180,17 @@ def load(configuration_name, particle, run_number):
     if isinstance(run_number, (str, int, float)):
         run_number = [run_number]
 
+    if run_number is not None:
+        file_list = [storage_location + configuration_name + r"/" + str(run) + '_' + particle + '.parquet' for run in
+                     run_number]
+    else:
+        import glob
+        file_list = glob.glob(storage_location + configuration_name + "/*" + particle + ".parquet")
     data_sets = list()
 
-    for run in run_number:
+    for f in file_list:
         try:
-            df = pd.read_parquet(
-                storage_location + configuration_name + r"/" + str(run) + '_' + particle + '.parquet')
+            df = pd.read_parquet(f)
             data_sets.append(df)
         except OSError:
             warnings.warn('It is not possible to load the files with run number = ' + str(run))
@@ -205,5 +200,10 @@ def load(configuration_name, particle, run_number):
         raise ValueError('No data was loaded.')
 
     result_dataset = pd.concat(data_sets)
+
+    # Temporary solution
+    if 'InvMassD0' in result_dataset.columns:
+        result_dataset['InvMass'] = result_dataset['InvMassD0']
+        result_dataset.drop('InvMassD0', axis='columns', inplace=True)
 
     return result_dataset

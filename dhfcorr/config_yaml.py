@@ -1,10 +1,11 @@
 import yaml
+from dhfcorr.definitions import ROOT_DIR
 
 
 class ConfigYaml(object):
     """Hold the yaml file containing the configuration"""
 
-    def __init__(self, selection_file=None, default_file="default_config_local.yaml"):
+    def __init__(self, selection_file=None, default_file=ROOT_DIR + "/config/default_config_local.yaml"):
         """Default constructor. selection_file is the yaml file with the configuration"""
 
         # Default configuration
@@ -34,6 +35,7 @@ class ConfigYaml(object):
             return d
 
         if selection_file is not None:
+            print(selection_file)
             with open(selection_file, "r") as document:
                 try:
                     config = yaml.safe_load(document)

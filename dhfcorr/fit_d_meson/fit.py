@@ -2,7 +2,7 @@ import ROOT
 
 
 class FitHF:
-    """ Class used to fit results using the AliHFInvMassFitter and keep track of the results
+    """ Class used to fit_d_meson results using the AliHFInvMassFitter and keep track of the results
 
     Attributes
     ----------
@@ -26,7 +26,7 @@ class FitHF:
         Returns
         -------
         fit_mass : ROOT.AliHFInvMassFitter
-            The fit mass object for this histogram
+            The fit_d_meson mass object for this histogram
 
         Raises
         ------

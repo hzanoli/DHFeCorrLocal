@@ -36,7 +36,7 @@ def plot_inv_mass_fit(fit, ax=None, **kwargs):
 
 
     fit: ROOT.AliHFInvMassFitter
-        The fit result that will be drawn
+        The fit_d_meson result that will be drawn
 
     ax : None or plt.axes
     **kwargs
@@ -71,7 +71,7 @@ def plot_inv_mass_fit(fit, ax=None, **kwargs):
                 **kwargs['kwargs_plot'])
     ax.set_xlim(kwargs['x_range'])
 
-    # Plot (total) fit function
+    # Plot (total) fit_d_meson function
     x_values_func = np.linspace(kwargs['x_range'][0], kwargs['x_range'][1], 200)
     y_total_func = [fit.GetMassFunc().Eval(x) for x in x_values_func]
     y_bkg_func = [fit.GetBackgroundRecalcFunc().Eval(x) for x in x_values_func]
@@ -116,20 +116,20 @@ def fit_inv_mass_root(histogram, config_inv_mass, config_inv_mass_def,
     histogram : ROOT.TH1
         The histogram that will be fitted.
     config_inv_mass : dict
-        Values used to configure the AliHFInvMassFitter. Should containt: range (the range that the fit will be
-        performed), bkg_func and sig_func(the function used to fit the data, as defined in AliHFInvMassFitter.h)
+        Values used to configure the AliHFInvMassFitter. Should containt: range (the range that the fit_d_meson will be
+        performed), bkg_func and sig_func(the function used to fit_d_meson the data, as defined in AliHFInvMassFitter.h)
     config_inv_mass_def: dict
         Default values of config_inv_mass. In case of the the parameters in config_inv_mass is not available, it will be
          picked from it.
     fix_mean: None or float
-        In case it is not None, the fit will fix the mean to this value.
+        In case it is not None, the fit_d_meson will fix the mean to this value.
     fix_sigma: None or float
-        In case it is not None, the fit will fix the standard deviation to this value.
+        In case it is not None, the fit_d_meson will fix the standard deviation to this value.
 
     Returns
     -------
     fit_mass : ROOT.AliHFInvMassFitter
-        The fit mass object for this histogram
+        The fit_d_meson mass object for this histogram
 
     Raises
     ------
@@ -280,7 +280,7 @@ def build_pairs(trigger, associated, suffixes=('_d', '_e'), identifier=('GridPID
     Returns
     -------
     fit_mass : ROOT.AliHFInvMassFitter
-        The fit mass object for this histogram
+        The fit_d_meson mass object for this histogram
 
     Raises
     ------
@@ -288,7 +288,6 @@ def build_pairs(trigger, associated, suffixes=('_d', '_e'), identifier=('GridPID
     """
 
     # Type check
-
     if not isinstance(trigger, pd.DataFrame):
         raise TypeError('Value passed for trigger is not a DataFrame')
     if not isinstance(associated, pd.DataFrame):

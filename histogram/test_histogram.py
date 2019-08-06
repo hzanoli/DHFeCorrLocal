@@ -1,7 +1,7 @@
 from unittest import TestCase
 import pandas as pd
 import numpy as np
-from dhfcorr.histogram import Histogram
+from histogram import Histogram
 
 
 class TestHistogram(TestCase):

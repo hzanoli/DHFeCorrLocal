@@ -5,8 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import root_numpy as rnp
 import dhfcorr.correlate as corr
-import dhfcorr.histogram as hist
-import warnings
+import histogram as hist
 
 sns.set()
 sns.set_context('notebook')
@@ -43,7 +42,7 @@ def correlate_same(df_d, df_e, suffixes=('_d', '_e'), axis=None, **kwargs):
 
     # Fit the Invariant mass for each pt_bin (in D and E)
 
-    selected_mass, weights
+    # selected_mass, weights
 
     prefixes = [suffix[1:].upper() for suffix in suffixes]
 
@@ -101,7 +100,7 @@ for d_i in range(len(d_pt_bins) - 1):
         fit = corr.fit_inv_mass_root(histogram, config_corr.correlation['inv_mass_lim'][d_i],
                                      config_corr.correlation['inv_mass_lim']['default'])
 
-        # Plot the invariant mass fit
+        # Plot the invariant mass fit_d_meson
         fig, ax = plt.subplots()
         corr.plot_inv_mass_fit(fit, ax, **config_corr.style_qa)
         plt.tight_layout()

@@ -15,7 +15,7 @@ except ImportError as error:
 class CorrConfig(object):
     """Class to store the configuration used during the correlation"""
 
-    def __init__(self, selection_file="default_config_local.yaml", name="D0"):
+    def __init__(self, selection_file="../config/default_config_local.yaml", name="D0"):
         with open(selection_file, "r") as document:
             try:
                 config = yaml.safe_load(document)
@@ -94,7 +94,7 @@ def plot_inv_mass_fit(fit, ax=None, **kwargs):
     err_signal = ROOT.Double()
     fit.Signal(n_sigma, signal, err_signal)
 
-    text_to_plot = 'S = {0:.0f} $\\pm$ {1:.0f} '.format(fit.GetRawYield(), fit.GetRawYieldError())
+    text_to_plot = 'S ({0:.0f}$\\sigma$) = {1:.0f} $\\pm$ {2:.0f} '.format(n_sigma, signal, err_signal)
     text_to_plot += 'B ({0:.0f}$\\sigma$) = {1:.0f} $\\pm$ {2:.0f} \n'.format(n_sigma, bkg, error_bkg)
     text_to_plot += 'S/B ({0:.0f}$\\sigma$) = {1:.4f}\n'.format(n_sigma, signal / bkg)
     # TODO include reflections
@@ -342,3 +342,31 @@ def build_pairs(trigger, associated, suffixes=('_d', '_e'), identifier=('GridPID
     assoc.columns = [x[:-len(suffixes[1])] if x.endswith(suffixes[1]) else x for x in assoc.columns]
 
     return correlation.copy(), trig.copy(), assoc.copy()
+
+
+def select_inv_mass(df, part_name, min_mass, max_mass, suffix=''):
+    """"Select the rows of df dataframe which is its mass is between [min_mass, max_mass] and return a new DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataframe with the D mesons. Should contain the column InvMass
+    min_mass: float
+        Minimum value that will be selected in the mass. Do not give it in number of sigmas.
+    max_mass: float
+        Maximum value that will be selected in the mass. Do not give it in number of sigmas.
+    suffix: str
+        Suffix used to modify the name of the DataFrame (e.g. '_d')
+    Returns
+    -------
+    df_selected: pd.DataFrame
+        Dataframe of the selected particles. Returns a new copy.
+    Raises
+    ------
+    KeyError
+        If 'IsSelected'+part_name+suffix (or 'IsSelected'+part_name+'bar'+suffix) column is not found in df.
+    """
+
+    selected = ((df['InvMass' + suffix] >= min_mass) &  # Check min_mass
+                (df['InvMass' + suffix] <= max_mass))  # Check max_mass
+    return df[selected]

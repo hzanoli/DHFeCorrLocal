@@ -52,8 +52,6 @@ def correlate_same(df_d, df_e, suffixes=('_d', '_e'), axis=None, **kwargs):
 
 
 
-
-
 df_e = pd.read_hdf('filtered_e.hdf', 'electrons')
 df_d = pd.read_hdf('filtered.hdf', 'D0')
 # df_d = pd.read_parquet('selected.parquet')

@@ -109,21 +109,16 @@ def apply_cuts_pt(df, cuts, pt_bin=None, select_in_pt_bins=True):
             selected_condition = df[feat] == bool(selection_pt.loc[feat])
             filtered = filtered & selected_condition
 
-    return filtered
+    return df[filtered]
 
 
-def filter_in_pt_bins(df, cuts, add_pt_bin_feat=False):
+def filter_in_pt_bins(df, cuts):
     """General warper to perform the selection of particles in df described in cuts."""
 
     # cut the dataframe in pt bins.
     pt_bins = pd.cut(df['Pt'], cuts.pt_bins)
     pass_cuts = df.groupby(by=pt_bins).apply(lambda x: apply_cuts_pt(x, cuts))
 
-    if add_pt_bin_feat:
-        df['PtBin'] = pt_bins
-        df.set_index([df['PtBin'], df.index], inplace=True)
-        df.sort_index(inplace=True)
-        pass_cuts.index = pass_cuts.index.rename(['PtBin', ''])
 
     return pass_cuts
 

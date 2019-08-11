@@ -71,7 +71,7 @@ class Histogram:
         Histogram
             A new histogram with df
         """
-
+        # TODO: include 0-count bins
         if not isinstance(df, pd.DataFrame):
             raise TypeError('df should be a DataFrame')
 

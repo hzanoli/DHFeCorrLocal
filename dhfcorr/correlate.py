@@ -75,11 +75,11 @@ def plot_inv_mass_fit(fit, ax=None, **kwargs):
     x_values_func = np.linspace(kwargs['x_range'][0], kwargs['x_range'][1], 200)
     y_total_func = [fit.GetMassFunc().Eval(x) for x in x_values_func]
     y_bkg_func = [fit.GetBackgroundRecalcFunc().Eval(x) for x in x_values_func]
-    ax.plot(x_values_func, y_total_func, label='Total Fit Function', color='red')
-    ax.plot(x_values_func, y_bkg_func, label='Background Fit Function', color='blue')
+    ax.plot(x_values_func, y_total_func, label='Total Fit')
+    ax.plot(x_values_func, y_bkg_func, label='Background Fit', linestyle='--')
 
-    ax.set_xlabel('Invariant Mass [GeV/$c$]')
-    ax.set_ylabel('Counts per {:.2f} MeV/$c$'.format(1000 * bins_width[0]))
+    ax.set_xlabel('Invariant Mass [GeV/$c^2$]')
+    ax.set_ylabel('Counts per {:.2f} MeV/$c^2$'.format(1000 * bins_width[0]))
 
     n_sigma = kwargs['n_sigma_significance']
     bkg = ROOT.Double()
@@ -94,21 +94,38 @@ def plot_inv_mass_fit(fit, ax=None, **kwargs):
     err_signal = ROOT.Double()
     fit.Signal(n_sigma, signal, err_signal)
 
-    text_to_plot = 'S ({0:.0f}$\\sigma$) = {1:.0f} $\\pm$ {2:.0f} '.format(n_sigma, signal, err_signal)
-    text_to_plot += 'B ({0:.0f}$\\sigma$) = {1:.0f} $\\pm$ {2:.0f} \n'.format(n_sigma, bkg, error_bkg)
-    text_to_plot += 'S/B ({0:.0f}$\\sigma$) = {1:.4f}\n'.format(n_sigma, signal / bkg)
+    text_to_plot_left = 'S ({0:.0f}$\\sigma$) = {1:.0f} $\\pm$ {2:.0f} \n'.format(n_sigma, signal, err_signal)
+    text_to_plot_left += 'B ({0:.0f}$\\sigma$) = {1:.0f} $\\pm$ {2:.0f}'.format(n_sigma, bkg, error_bkg)
+    text_to_plot_right = 'S/B ({0:.0f}$\\sigma$) = {1:.4f}\n'.format(n_sigma, signal / bkg)
     # TODO include reflections
     # pinfos->AddText(Form("Refl/Sig =  %.3f #pm %.3f ", fRflFunc->GetParameter(0), fRflFunc->GetParError(0)));
-    text_to_plot += 'Significance({0:.0f}$\\sigma$) = {1:.1f} $\\pm$ {2:.1f} \n'.format(n_sigma, signif, err_signif)
+    text_to_plot_right += 'Significance({0:.0f}$\\sigma$) = {1:.1f} $\\pm$ {2:.1f}'.format(n_sigma, signif, err_signif)
 
-    ax.set_title(text_to_plot)
-    ax.legend(loc='best', frameon=False)
+    # a x.set_title(text_to_plot)
+    ax.get_figure().subplots_adjust(top=0.7)
+    ax.text(0.05, 1.125, text_to_plot_left, transform=ax.transAxes, verticalalignment='top')
+    ax.text(0.55, 1.125, text_to_plot_right, transform=ax.transAxes, verticalalignment='top')
+
+    text_chi2 = r"$\chi^2_{red}" + " = {0:1.2f}$".format(fit.GetReducedChiSquare())
+    ax.plot(np.NaN, np.NaN, '-', color='none', label=text_chi2)
+
+    text_mean = '$\\mu = ' + '{0:1.3f}'.format(fit.GetMean()) + '\\pm {0:2.3f}$'.format(fit.GetMeanUncertainty())
+    text_mean += ' GeV/$c^2$'
+    ax.plot(np.NaN, np.NaN, '-', color='none', label=text_mean)
+
+    text_std = r'$\sigma = ' + '{0:2.1f}'.format(fit.GetSigma() * 1000.)
+    text_std += '\\pm {0:2.1f}$'.format(fit.GetSigmaUncertainty() * 1000) + ' MeV/$c^2$'
+    ax.plot(np.NaN, np.NaN, '-', color='none', label=text_std)
+
+    handles, labels = plt.gca().get_legend_handles_labels()
+    order = [5, 0, 1, 2, 3, 4]
+    ax.legend([handles[idx] for idx in order], [labels[idx] for idx in order],
+              loc='best', frameon=False)
 
     return ax
 
 
-def fit_inv_mass_root(histogram, config_inv_mass, config_inv_mass_def,
-                      fix_mean=None, fix_sigma=None):
+def fit_inv_mass_root(histogram, config_inv_mass, fix_mean=None, fix_sigma=None):
     """"Fits the invariant mass distribution using AliHFInvMassFitter.
 
     Parameters
@@ -118,9 +135,6 @@ def fit_inv_mass_root(histogram, config_inv_mass, config_inv_mass_def,
     config_inv_mass : dict
         Values used to configure the AliHFInvMassFitter. Should containt: range (the range that the fit_d_meson will be
         performed), bkg_func and sig_func(the function used to fit_d_meson the data, as defined in AliHFInvMassFitter.h)
-    config_inv_mass_def: dict
-        Default values of config_inv_mass. In case of the the parameters in config_inv_mass is not available, it will be
-         picked from it.
     fix_mean: None or float
         In case it is not None, the fit_d_meson will fix the mean to this value.
     fix_sigma: None or float
@@ -142,9 +156,8 @@ def fit_inv_mass_root(histogram, config_inv_mass, config_inv_mass_def,
     """
 
     # Copy dict to avoid changes
-    local_dict = config_inv_mass_def.copy()
-    local_dict.update(config_inv_mass)
 
+    local_dict = config_inv_mass.copy()
     try:
         minimum = local_dict['range'][0]
         maximum = local_dict['range'][1]
@@ -171,13 +184,11 @@ def fit_inv_mass_root(histogram, config_inv_mass, config_inv_mass_def,
     if fix_mean is not None:
         if not isinstance(fix_mean, float):
             raise TypeError('The value to fix the mean should be a float')
-
         fit_mass.SetFixGaussianMean(fix_mean)
 
     if fix_sigma is not None:
         if not isinstance(fix_sigma, float):
             raise TypeError('The value to fix the standard deviation should be a float')
-
         fit_mass.SetFixGaussianSigma(fix_sigma)
 
     fit_mass.MassFitter(False)
@@ -190,7 +201,8 @@ def prepare_single_particle_df(df, suffix, **kwargs):
     Changes the names of the columns by appending the suffix.
     Adds values for weights in case they are not available.
 
-    Returns the value of the columns before the names were changed and the new values."""
+    Returns the value of the columns before the names were changed and the new values.
+    """
 
     # Get rid of the index coming from the Pt bins used to filter the trigger and/or d associated
     df.reset_index(drop=True, inplace=True)
@@ -279,8 +291,6 @@ def build_pairs(trigger, associated, suffixes=('_d', '_e'), identifier=('GridPID
 
     Returns
     -------
-    fit_mass : ROOT.AliHFInvMassFitter
-        The fit_d_meson mass object for this histogram
 
     Raises
     ------
@@ -297,9 +307,9 @@ def build_pairs(trigger, associated, suffixes=('_d', '_e'), identifier=('GridPID
     trigger = trigger.copy()
     associated = associated.copy()
 
-    # Prepare the features and add possible missing ones. trigger_cols_old is not used in current implementation
-    trigger_cols_old, trigger_cols_new = prepare_single_particle_df(trigger, suffixes[0], **kwargs)
-    assoc_cols_old, assoc_cols_new = prepare_single_particle_df(associated, suffixes[1], **kwargs)
+    # Prepare the features and add possible missing ones.
+    prepare_single_particle_df(trigger, suffixes[0], **kwargs)
+    prepare_single_particle_df(associated, suffixes[1], **kwargs)
 
     # Build the correlation pairs
     feat_on_left = [str(x) + suffixes[0] for x in identifier]
@@ -323,29 +333,21 @@ def build_pairs(trigger, associated, suffixes=('_d', '_e'), identifier=('GridPID
     # Save the weight square that will be useful to calculate the errors
     correlation['WeightSquare'] = correlation['Weight'] ** 2
 
-    # Aggregate to produce the single particle histogram
-    # Use the first entry, since they are all repeated
-    trig = correlation.groupby(by=['Id' + suffixes[0]]).nth(0).reset_index()
-    assoc = correlation.groupby(by=['Id' + suffixes[1]]).nth(0).reset_index()
+    return correlation
 
-    # Keep any column that refers to 'Bin'
+
+def reduce_to_single_particle(correlation, suffix):
+    particle = correlation.groupby(by=['Id' + suffix]).nth(0).reset_index()
     cols_to_keep = [x for x in correlation.columns if x.endswith('Bin')]
-    trigger_cols_new += cols_to_keep
-    assoc_cols_new += cols_to_keep
+    cols_to_keep += [x for x in correlation.columns if x.endswith(suffix)]
+    particle = particle[cols_to_keep]
+    particle.columns = [x[:-len(suffix)] if x.endswith(suffix) else x for x in particle.columns]
 
-    # Select only the columns of the particle (+ cols with binning)
-    trig = trig[trigger_cols_new]
-    assoc = assoc[assoc_cols_new]
-
-    # Rename the columns to remove the suffixes
-    trig.columns = [x[:-len(suffixes[0])] if x.endswith(suffixes[0]) else x for x in trig.columns]
-    assoc.columns = [x[:-len(suffixes[1])] if x.endswith(suffixes[1]) else x for x in assoc.columns]
-
-    return correlation.copy(), trig.copy(), assoc.copy()
+    return particle
 
 
-def select_inv_mass(df, part_name, min_mass, max_mass, suffix=''):
-    """"Select the rows of df dataframe which is its mass is between [min_mass, max_mass] and return a new DataFrame.
+def select_inv_mass(df, min_mass, max_mass, suffix=''):
+    """"Select the rows of df dataframe which is its mass is between [min_mass, max_mass] and return a view.
 
     Parameters
     ----------
@@ -360,13 +362,9 @@ def select_inv_mass(df, part_name, min_mass, max_mass, suffix=''):
     Returns
     -------
     df_selected: pd.DataFrame
-        Dataframe of the selected particles. Returns a new copy.
-    Raises
-    ------
-    KeyError
-        If 'IsSelected'+part_name+suffix (or 'IsSelected'+part_name+'bar'+suffix) column is not found in df.
+        Dataframe of the selected particles. Returns a view.
+
     """
 
-    selected = ((df['InvMass' + suffix] >= min_mass) &  # Check min_mass
-                (df['InvMass' + suffix] <= max_mass))  # Check max_mass
+    selected = ((df['InvMass' + suffix] >= min_mass) & (df['InvMass' + suffix] <= max_mass))  # Check max_mass
     return df[selected]

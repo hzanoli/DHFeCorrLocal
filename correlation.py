@@ -5,11 +5,167 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import root_numpy as rnp
 import dhfcorr.correlate as corr
-import histogram as hist
+from histogram.histogram import Histogram
 
 sns.set()
 sns.set_context('notebook')
 ROOT.TH1.AddDirectory(False)
+
+variables_to_keep_D = ['GridPID', 'EventNumber', 'ID', 'IsParticleCandidate', 'Pt', 'Eta', 'Phi', 'InvMass']
+
+variables_to_keep_e = ['GridPID', 'EventNumber', 'Centrality', 'VtxZ', 'Charge', 'Pt', 'Eta', 'Phi',
+                       'InvMassPartnersULS', 'InvMassPartnersLS']
+
+df_e = pd.read_parquet('selected_e.parquet')
+df_e = df_e[variables_to_keep_e]
+# df_d = pd.read_parquet('selected_rectangular.parquet')
+df_d = pd.read_parquet('selected_ml.parquet')
+df_d = df_d[df_d['prediction'] > 0.9]
+df_d['InvMass'] = df_d['InvMassD0']
+df_d = df_d[variables_to_keep_D]
+
+config_corr = corr.CorrConfig('dhfcorr/config/default_config_local.yaml')
+
+
+def fit_d_meson_mass(df, n_bins='auto', min_hist=1.6, max_hist=2.2, **kwargs):
+    inv_mass = df['InvMass']
+    weight = df['Weight']
+
+    if isinstance(n_bins, str):
+        bins = np.array(np.histogram_bin_edges(inv_mass, bins=n_bins, range=(min_hist, max_hist)), dtype='float64')
+        histogram = ROOT.TH1F("MassFit", "MassFit", len(bins) - 1, bins)
+    else:
+        histogram = ROOT.TH1F("MassFit", "MassFit", n_bins, min_hist, max_hist)
+
+    histogram.Sumw2()
+    rnp.fill_hist(histogram, inv_mass, weights=weight)
+
+    fit = corr.fit_inv_mass_root(histogram, kwargs['inv_mass_lim']['default'])
+    return fit
+
+
+def correlation_signal_region(df, fit, n_sigma, suffix='_d', axis=()):
+    mean, sigma = (fit.GetMean(), fit.GetSigma())
+    signal = corr.select_inv_mass(df, mean - n_sigma * sigma, mean + n_sigma * sigma, suffix=suffix)
+    signal_corr = Histogram.from_dataframe(signal, axis)
+
+    return signal_corr
+
+
+def correlation_background_region(df, fit, n_sigma_min, n_sigma_max, suffix='_d', axis=()):
+    mean, sigma = (fit.GetMean(), fit.GetSigma())
+
+    right = corr.select_inv_mass(df, mean - n_sigma_max * sigma, mean - n_sigma_min * sigma, suffix=suffix)
+    left = corr.select_inv_mass(df, mean - n_sigma_max * sigma, mean - n_sigma_min * sigma, suffix=suffix)
+
+    bkg = pd.concat([right, left])
+    bkg_corr = Histogram.from_dataframe(bkg, axis)
+    return bkg_corr
+
+
+def get_n_bkg_sidebands(fit, n_sigma_min, n_sigma_max):
+    mean, sigma = (fit.GetMean(), fit.GetSigma())
+
+    background_sidebands_1 = ROOT.Double()
+    error_bkg_sidebands_1 = ROOT.Double()
+    fit.Background(mean - n_sigma_max * sigma, mean - n_sigma_min * sigma, background_sidebands_1,
+                   error_bkg_sidebands_1)
+
+    background_sidebands_2 = ROOT.Double()
+    error_bkg_sidebands_2 = ROOT.Double()
+    fit.Background(mean + n_sigma_min * sigma, mean + n_sigma_max * sigma, background_sidebands_2,
+                   error_bkg_sidebands_2)
+    background_sidebands = background_sidebands_1 + background_sidebands_2
+    error_bkg_sidebands = np.sqrt(error_bkg_sidebands_1 ** 2 + error_bkg_sidebands_2 ** 2)
+
+    return float(background_sidebands), float(error_bkg_sidebands)
+
+
+def get_n_signal(fit, n_sigma):
+    signal = ROOT.Double()
+    err_signal = ROOT.Double()
+    fit.Signal(n_sigma, signal, err_signal)
+    return float(signal), float(err_signal)
+
+
+def get_n_bkg(fit, n_sigma):
+    bkg = ROOT.Double()
+    err_bkg = ROOT.Double()
+    fit.Background(n_sigma, bkg, err_bkg)
+    return float(bkg), float(err_bkg)
+
+
+# First create the pairs with all the selected D mesons and Electrons
+# This is necessary because since both D meson and electron where selected.
+# So we need to check if they are still in the same event.
+
+pairs = corr.build_pairs(df_d, df_e, **config_corr.correlation)
+
+# Calculate the invariant mass for each (D meson, electron) pT bin
+d_pt_bins = pairs['DPtBin'].cat.categories
+e_pt_bins = pairs['EPtBin'].cat.categories
+
+# Fit mass bins
+mass_fits_hist = list()
+
+# Fit invariant mass
+fig_list = list()
+df_list = list()
+correlation_signal = list()
+correlation_bkg = list()
+
+axis = ('CentralityBin', 'VtxZBin', 'DPtBin', 'EPtBin', 'DeltaEtaBin', 'DeltaPhiBin')
+
+
+def correlation_dmeson(df_pairs, config_corr, n_sigma_sig=2., n_sigma_bkg_min=4., n_sigma_bkg_max=10.,
+                       suffix='_d', axis=('CentralityBin', 'VtxZBin', 'DPtBin', 'EPtBin', 'DeltaEtaBin',
+                                          'DeltaPhiBin'), d_pt_bin=None, e_pt_bin=None):
+    d_in_this_pt = corr.reduce_to_single_particle(df_pairs, suffix)
+    fit = fit_d_meson_mass(d_in_this_pt, **config_corr.correlation)
+
+    signal_corr = correlation_signal_region(df_pairs, fit, n_sigma_sig, axis=axis).project(['DeltaPhiBin'])
+    n_signal, err_n_signal = get_n_signal(fit, n_sigma_sig)
+
+    bkg_corr = correlation_background_region(df_pairs, fit, n_sigma_bkg_min, n_sigma_bkg_max,
+                                             axis=axis).project(['DeltaPhiBin'])
+
+    n_bkg_sidebands, err_n_bkg_sidebands = get_n_bkg_sidebands(fit, n_sigma_bkg_min, n_sigma_bkg_max)
+    n_bkg_signal_region, err_n_bkg_signal_region = get_n_bkg(fit, n_sigma_sig)
+
+    # normalize the background correlation
+    bkg_corr = bkg_corr / n_bkg_sidebands * n_bkg_signal_region
+
+    if n_signal > 0:
+        d_meson_corr = (signal_corr - bkg_corr) / n_signal
+    else:
+        d_meson_corr = Histogram()
+
+    fig, ax = plt.subplots()
+    corr.plot_inv_mass_fit(fit, ax, **config_corr.style_qa)
+
+    # Problem in the automatic python bindings: the destructor is twice. Call it manually.
+    result = pd.DataFrame({'InvMassFit': ax, 'DMesonCorr': d_meson_corr, 'SignalRegCorr': signal_corr,
+                           'NSignal': n_signal, 'NSignalErr': err_n_signal, 'BkgRegCorr': bkg_corr,
+                           'NBkgSideBands': n_bkg_sidebands, 'NBkgSideBandsErr': err_n_bkg_sidebands,
+                           'NBkgSignalReg': n_bkg_signal_region, 'NBkgSignalRegErr': err_n_bkg_signal_region},
+                          index=[0])
+    del fit
+
+    return result
+
+
+for d_i in d_pt_bins:
+    for e_i in e_pt_bins:
+        print(e_i)
+        print(d_i)
+
+        particles_in_this_bin = pairs[(pairs['EPtBin'] == e_i) & (pairs['DPtBin'] == d_i)]
+        results = correlation_dmeson(particles_in_this_bin, config_corr, d_pt_bin=d_i, e_pt_bin=e_i)
+        plt.tight_layout()
+        results['InvMassFit'].iloc[0].get_figure().savefig('mass_pt' + str(d_i) + '.pdf', bbox_inches="tight")
+
+
+# plt.show()
 
 
 def correlate_same(df_d, df_e, suffixes=('_d', '_e'), axis=None, **kwargs):
@@ -28,17 +184,16 @@ def correlate_same(df_d, df_e, suffixes=('_d', '_e'), axis=None, **kwargs):
     kwargs :
         Additional parameters used to configure the correlation.
 
-
     Returns
     -------
     histogram : hist.Histogram
-        The same-event histogram for
+        The same-event histogram
     Raises
     ------
 
     """
 
-    pairs, selected_d, selected_e = corr.build_pairs(df_d, df_e, suffixes, **config_corr.correlation)
+    pairs, selected_d, selected_e = corr.build_pairs(df_d, df_e, suffixes, **kwargs)
 
     # Fit the Invariant mass for each pt_bin (in D and E)
 
@@ -48,129 +203,3 @@ def correlate_same(df_d, df_e, suffixes=('_d', '_e'), axis=None, **kwargs):
 
     d_bins = selected_d['PtBin' + prefixes[0]].cat.categories
     e_bins = selected_d['PtBin' + prefixes[1]].cat.categories
-
-
-
-
-df_e = pd.read_hdf('filtered_e.hdf', 'electrons')
-df_d = pd.read_hdf('filtered.hdf', 'D0')
-# df_d = pd.read_parquet('selected.parquet')
-
-config_corr = corr.CorrConfig()
-
-# First create the pairs with all the selected D mesons and Electrons
-# This is necessary because since both D meson and electron where selected.
-# So we need to check if they are still in the same event.
-
-pairs, selected_d, selected_e = corr.build_pairs(df_d, df_e, **config_corr.correlation)
-
-# histo = hist.Histogram().from_dataframe(pairs, ('CentralityBin', 'VtxZBin',
-# 'DPtBin','EPtBin', 'DeltaEtaBin', 'DeltaPhiBin'))
-
-# Calculate the invariant mass for each (D meson, electron) pT bin
-d_pt_bins = config_corr.correlation['bins_d']
-e_pt_bins = config_corr.correlation['bins_e']
-
-# Fit mass bins
-mass_fits_hist = list()
-
-# Fit invariant mass
-fig_list = list()
-df_list = list()
-correlation_signal = list()
-correlation_bkg = list()
-
-for d_i in range(len(d_pt_bins) - 1):
-    list_e = list()
-    df_list_e = list()
-    correlation_signal_d = list()
-    correlation_bkg_d = list()
-
-    for e_i in range(len(e_pt_bins) - 1):
-        # Get only pairs in this bin
-        d_in_this_pt = selected_d[(selected_d['EPtBin'] == e_i) & (selected_d['DPtBin'] == d_i)]
-        selected_mass, weights = corr.make_inv_mass(d_in_this_pt, 'D0')
-
-        histogram = ROOT.TH1F("D0", "D0", 100, 1.3, 2.3)
-        histogram.Sumw2()
-        rnp.fill_hist(histogram, selected_mass, weights=weights)
-
-        fit = corr.fit_inv_mass_root(histogram, config_corr.correlation['inv_mass_lim'][d_i],
-                                     config_corr.correlation['inv_mass_lim']['default'])
-
-        # Plot the invariant mass fit_d_meson
-        fig, ax = plt.subplots()
-        corr.plot_inv_mass_fit(fit, ax, **config_corr.style_qa)
-        plt.tight_layout()
-        fig_list.append(ax)
-
-        list_e.append(histogram)
-
-        mean = fit.GetMean()
-        sigma = fit.GetSigma()
-
-        particles_in_this_bin = pairs[(pairs['EPtBin'] == e_i) & (pairs['DPtBin'] == d_i)]
-
-        signal = corr.select_inv_mass(particles_in_this_bin, 'D0', mean - 2 * sigma, mean + 2 * sigma, suffix='_d')
-        bkg = pd.concat([corr.select_inv_mass(particles_in_this_bin, 'D0', mean - 10. * sigma, mean - 4 * sigma,
-                                              suffix='_d'),
-                         corr.select_inv_mass(particles_in_this_bin, 'D0', mean + 4. * sigma, mean + 10 * sigma,
-                                              suffix='_d')])
-
-        n_sigma = 2.0
-        background = ROOT.Double()
-        error_bkg = ROOT.Double()
-        fit.Background(n_sigma, background, error_bkg)
-
-        axis = ('CentralityBin', 'VtxZBin', 'DPtBin', 'EPtBin', 'DeltaEtaBin', 'DeltaPhiBin')
-        signal_corr = hist.Histogram.from_dataframe(signal, axis).project(['DeltaPhiBin'])
-        bkg_corr = hist.Histogram.from_dataframe(bkg, axis).project(['DeltaPhiBin'])
-
-        background_sidebands_1 = ROOT.Double()
-        error_bkg_sidebands_1 = ROOT.Double()
-        fit.Background(mean - 10. * sigma, mean - 4 * sigma, background_sidebands_1, error_bkg_sidebands_1)
-
-        print('side bands 1 = ' + str(background_sidebands_1))
-
-        background_sidebands_2 = ROOT.Double()
-        error_bkg_sidebands_2 = ROOT.Double()
-        fit.Background(mean + 4. * sigma, mean + 10 * sigma, background_sidebands_2, error_bkg_sidebands_2)
-
-        print('side bands 2 = ' + str(background_sidebands_2))
-
-        background_sidebands = background_sidebands_1 + background_sidebands_2
-        error_bkg_sidebands = np.sqrt(error_bkg_sidebands_1 ** 2 + error_bkg_sidebands_2 ** 2)
-
-        signal = ROOT.Double()
-        err_signal = ROOT.Double()
-        fit.Signal(n_sigma, signal, err_signal)
-
-        # normalize the background correlation
-        bkg_corr = bkg_corr / (background_sidebands / background)
-
-        ax_bkg = bkg_corr.plot1d('DeltaPhiBin', color='black', label='Background (normalized to signal region)')
-        signal_corr.plot1d('DeltaPhiBin', ax_bkg, color='red', label='Signal')
-        ax_bkg.legend()
-        ax_bkg.get_figure().savefig('correlation_intermediate_pt' + str(d_i) + '.pdf', bbox_inches="tight")
-
-        if signal > 0:
-            ax_sig = ((signal_corr - bkg_corr) / signal).plot1d('DeltaPhiBin', label='D-Inclusive electron')
-            ax_sig.set_ylim(min([ax_sig.get_ylim()[0], 0]), 1.2 * ax_sig.get_ylim()[1])
-            ax_sig.legend()
-            ax_sig.set_xlabel(r'$\Delta\varphi$ [rad]')
-            ax_sig.set_ylabel(r'$\frac{1}{N^{D^0}} \frac{dN}{d\Delta\varphi}$')
-            ax_sig.get_figure().savefig('correlation_pt' + str(d_i) + '.pdf', bbox_inches="tight")
-
-        correlation_signal_d.append(signal_corr)
-        correlation_bkg_d.append(bkg_corr)
-
-        fig.savefig('mass_pt' + str(d_i) + '.pdf', bbox_inches="tight")
-
-        # Problem in the automatic python bindings: the destructor is twice. Call it manually.
-        del fit
-
-    mass_fits_hist.append(list_e)
-    correlation_signal.append(correlation_signal_d)
-    correlation_bkg.append(correlation_bkg_d)
-
-plt.show()

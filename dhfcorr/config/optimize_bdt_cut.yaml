@@ -1,0 +1,246 @@
+correlation:
+  bins_e: [0.5,10.]
+  bins_d: [2.,3.,4.,5.,6.,7.,8.,10.,12.,16.,24.]
+  bins_cent: [-10.,100.1]
+  bins_zvtx: [-10.01,10.01]
+  bins_eta: [-2,2]
+  bins_phi: [0.,3.14159265]
+  inv_mass_lim:
+    0:
+      range: [1.7,2.1]
+    1:
+      range: [1.7,2.1]
+    2:
+      range: [1.7,2.1]
+    3:
+      range: [1.7,2.1]
+    4:
+      range: [1.7,2.1]
+    default:
+      range: [1.7,2.1]
+      # defined in AliHFInvMassFitter.h
+      sig_func: kGaus
+      bkg_func: kPol2
+
+correlation_qa_style:
+  kwargs_plot:
+    fmt: 'o'
+    color: 'black'
+  x_range: [1.7,2.1]
+  n_sigma_significance: 2.
+
+
+electron:
+  particle_dependent_variables: []
+  features_abs: []
+  particle_name: 'Electron'
+  particle_mass: 1111.
+  cuts:
+    - PtBin: 0
+      Pt_range: [1.0,4.0]
+      Eta_range: [-0.8,0.8]
+      NClsTPC_min: 0
+      NClsTPCDeDx_min: 0
+      NITSCls_min: 2
+      pixel_req: kBoth #check possibilities in AliAnalysisTaskDHFeCorrelation::ITSPixel_t, to be implemented offline? how?
+      DCAz_max: 1000.
+      DCAxy_max: 1000.
+
+D0:
+  particle_dependent_variables: ['DeltaM', 'CosTs','PID', 'InvMass']
+  features_abs: ['CosTs','DeltaM','D0Daughter0', 'D0Daughter1','Normd0MeasMinusExp' , 'ImpParXY', 'CosPXY']
+  particle_name: "D0"
+  particle_mass: 1.86483
+  cuts:
+    - PtBin: 0
+      Pt_range: [1.0, 2.0]
+      DeltaM_max: 0.4
+      DCA_max: 0.03
+      CosTs_max: 0.8
+      PtDaughter0_min: 0.5
+      PtDaughter1_min: 0.5
+      D0Daughter0_max: 0.1
+      D0Daughter1_max: 0.1
+      D0Prod_max: -3.5e-4
+      NormDecayLengthXY_min: 5.0
+      CosP_min: 0.95
+      CosPXY_min: 0.0
+      Normd0MeasMinusExp_max: 999.0
+      ReducedChi2_max: 999.0
+      PID_bool: True
+    - PtBin: 1
+      Pt_range: [2.0, 3.0]
+      DeltaM_max: 0.4
+      DCA_max: 0.03
+      CosTs_max: 0.8
+      PtDaughter0_min: 0.7
+      PtDaughter1_min: 0.7
+      D0Daughter0_max: 0.1
+      D0Daughter1_max: 0.1
+      D0Prod_max: -3.e-4
+      NormDecayLengthXY_min: 5.0
+      CosP_min: 0.95
+      CosPXY_min: 0.0
+      Normd0MeasMinusExp_max: 999.0
+      ReducedChi2_max: 999.0
+      PID_bool: True
+    - PtBin: 2
+      Pt_range: [3.0,4.0]
+      DeltaM_max: 0.4
+      DCA_max: 0.03
+      CosTs_max: 0.8
+      PtDaughter0_min: 0.7
+      PtDaughter1_min: 0.7
+      D0Daughter0_max: 0.1
+      D0Daughter1_max: 0.1
+      D0Prod_max: -3.e-4
+      NormDecayLengthXY_min: 5.0
+      CosP_min: 0.95
+      CosPXY_min: 0.0
+      Normd0MeasMinusExp_max: 999.0
+      ReducedChi2_max: 999.0
+      PID_bool: True
+    - PtBin: 3
+      Pt_range: [4.0, 5.0]
+      DeltaM_max: 0.4
+      DCA_max: 0.03
+      CosTs_max: 0.8
+      PtDaughter0_min: 0.7
+      PtDaughter1_min: 0.7
+      D0Daughter0_max: 0.1
+      D0Daughter1_max: 0.1
+      D0Prod_max: -1.5e-4
+      NormDecayLengthXY_min: 5.
+      CosP_min: 0.95
+      CosPXY_min: 0.0
+      Normd0MeasMinusExp_max: 999.0
+      ReducedChi2_max: 999.0
+      PID_bool: True
+    - PtBin: 4
+      Pt_range: [5.0, 6.0]
+      DeltaM_max: 0.4
+      DCA_max: 0.03
+      CosTs_max: 0.8
+      PtDaughter0_min: 0.7
+      PtDaughter1_min: 0.7
+      D0Daughter0_max: 0.1
+      D0Daughter1_max: 0.1
+      D0Prod_max: -1.e-4
+      NormDecayLengthXY_min: 4.0
+      CosP_min: 0.95
+      CosPXY_min: 0.0
+      Normd0MeasMinusExp_max: 999.0
+      ReducedChi2_max: 999.0
+      PID_bool: True
+    - PtBin: 5
+      Pt_range: [6.0, 7.0]
+      DeltaM_max: 0.4
+      DCA_max: 0.03
+      CosTs_max: 0.8
+      PtDaughter0_min: 0.7
+      PtDaughter1_min: 0.7
+      D0Daughter0_max: 0.1
+      D0Daughter1_max: 0.1
+      D0Prod_max: -0.8e-4
+      NormDecayLengthXY_min: 4.0
+      CosP_min: 0.95
+      CosPXY_min: 0.0
+      Normd0MeasMinusExp_max: 999.0
+      ReducedChi2_max: 999.0
+      PID_bool: True
+    - PtBin: 6
+      Pt_range: [7.0,8.0]
+      DeltaM_max: 0.4
+      DCA_max: 0.03
+      CosTs_max: 0.8
+      PtDaughter0_min: 0.7
+      PtDaughter1_min: 0.7
+      D0Daughter0_max: 0.1
+      D0Daughter1_max: 0.1
+      D0Prod_max: -0.8e-4
+      NormDecayLengthXY_min: 4.0
+      CosP_min: 0.95
+      CosPXY_min: 0.0
+      Normd0MeasMinusExp_max: 999.0
+      ReducedChi2_max: 999.0
+      PID_bool: True
+    - PtBin: 7
+      Pt_range: [8.0, 10.]
+      DeltaM_max: 0.4
+      DCA_max: 0.03
+      CosTs_max: 0.9
+      PtDaughter0_min: 0.7
+      PtDaughter1_min: 0.7
+      D0Daughter0_max: 0.1
+      D0Daughter1_max: 0.1
+      D0Prod_max: -0.5e-4
+      NormDecayLengthXY_min: 3.0
+      CosP_min: 0.95
+      CosPXY_min: 0.0
+      Normd0MeasMinusExp_max: 999.0
+      ReducedChi2_max: 999.0
+      PID_bool: True
+    - PtBin: 8
+      Pt_range: [10.0, 12.0]
+      DeltaM_max: 0.4
+      DCA_max: 0.03
+      CosTs_max: 0.9
+      PtDaughter0_min: 0.7
+      PtDaughter1_min: 0.7
+      D0Daughter0_max: 0.1
+      D0Daughter1_max: 0.1
+      D0Prod_max: -0.5e-4
+      NormDecayLengthXY_min: 3.0
+      CosP_min: 0.95
+      CosPXY_min: 0.0
+      Normd0MeasMinusExp_max: 999.0
+      ReducedChi2_max: 999.0
+      PID_bool: True
+    - PtBin: 9
+      Pt_range: [12.0, 16.0]
+      DeltaM_max: 0.4
+      DCA_max: 0.03
+      CosTs_max: 1.0
+      PtDaughter0_min: 0.7
+      PtDaughter1_min: 0.7
+      D0Daughter0_max: 0.1
+      D0Daughter1_max: 0.1
+      D0Prod_max: 0.1e-4
+      NormDecayLengthXY_min: 3.0
+      CosP_min: 0.9
+      CosPXY_min: 0.0
+      Normd0MeasMinusExp_max: 999.0
+      ReducedChi2_max: 999.0
+      PID_bool: True
+    - PtBin: 10
+      Pt_range: [16.0, 24.]
+      DeltaM_max: 0.4
+      DCA_max: 0.03
+      CosTs_max: 1.0
+      PtDaughter0_min: 0.7
+      PtDaughter1_min: 0.7
+      D0Daughter0_max: 0.1
+      D0Daughter1_max: 0.1
+      D0Prod_max: 0.1e-4
+      NormDecayLengthXY_min: 3.0
+      CosP_min: 0.9
+      CosPXY_min: 0.0
+      Normd0MeasMinusExp_max: 999.0
+      ReducedChi2_max: 999.
+      PID_bool: True
+    - PtBin: 11
+      Pt_range: [24.0, 36.]
+      DeltaM_max: 0.4
+      DCA_max: 0.03
+      CosTs_max: 1.0
+      PtDaughter0_min: 0.7
+      PtDaughter1_min: 0.7
+      D0Daughter0_max: 0.1
+      D0Daughter1_max: 0.1
+      D0Prod_max: 0.1e-4
+      NormDecayLengthXY_min: 3.0
+      CosP_min: 0.9
+      CosPXY_min: 0.0
+      Normd0MeasMinusExp_max: 999.0
+      ReducedChi2_max: 999.0
+      PID_bool: True

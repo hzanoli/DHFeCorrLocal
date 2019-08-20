@@ -119,7 +119,6 @@ def filter_in_pt_bins(df, cuts):
     pt_bins = pd.cut(df['Pt'], cuts.pt_bins)
     pass_cuts = df.groupby(by=pt_bins).apply(lambda x: apply_cuts_pt(x, cuts))
 
-
     return pass_cuts
 
 
@@ -127,7 +126,7 @@ def build_additional_features_dmeson(df):
     """Build features which will be used during the selection for D mesons.
     Any additional features can be added here.
     """
-    df['D0Prod'] = df['D0Daughter1'] * df['D0Daughter0']
+    df['D0Prod'] = (df['D0Daughter1'] * df['D0Daughter0']).astype(np.float32)
 
 
 def get_true_dmesons(df):

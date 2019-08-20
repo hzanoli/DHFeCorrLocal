@@ -2,13 +2,18 @@ import pandas as pd
 import numpy as np
 import yaml
 import matplotlib.pyplot as plt
+import warnings
+from histogram.histogram import Histogram
+import sklearn.utils as skutils
 
 try:
     import ROOT
+    import root_numpy as rnp
 except ImportError as error:
     print(error)
-    print('ROOT is not available. The functionality might be limited.')
+    warnings.warn('ROOT is not available. The functionality might be limited. Please check setup.')
     ROOT = None
+    root_numpy = None
     pass
 
 
@@ -67,7 +72,7 @@ def plot_inv_mass_fit(fit, ax=None, **kwargs):
     if kwargs['x_range'][0] > kwargs['x_range'][1]:
         raise ValueError("Minimum value (x axis) in the mass plots is larger than the maximum value")
 
-    ax.errorbar(bins_center, content, yerr=y_error, xerr=np.array(bins_width) / 2., label='Data',
+    ax.errorbar(bins_center, content, yerr=y_error, xerr=np.array(bins_width) / 2., markersize=3, label='Data',
                 **kwargs['kwargs_plot'])
     ax.set_xlim(kwargs['x_range'])
 
@@ -82,17 +87,9 @@ def plot_inv_mass_fit(fit, ax=None, **kwargs):
     ax.set_ylabel('Counts per {:.2f} MeV/$c^2$'.format(1000 * bins_width[0]))
 
     n_sigma = kwargs['n_sigma_significance']
-    bkg = ROOT.Double()
-    error_bkg = ROOT.Double()
-    fit.Background(n_sigma, bkg, error_bkg)
-
-    signif = ROOT.Double()
-    err_signif = ROOT.Double()
-    fit.Significance(n_sigma, signif, err_signif)
-
-    signal = ROOT.Double()
-    err_signal = ROOT.Double()
-    fit.Signal(n_sigma, signal, err_signal)
+    bkg, error_bkg = get_n_bkg(fit, n_sigma)
+    signif, err_signif = get_significance(fit, n_sigma)
+    signal, err_signal = get_n_signal(fit, n_sigma)
 
     text_to_plot_left = 'S ({0:.0f}$\\sigma$) = {1:.0f} $\\pm$ {2:.0f} \n'.format(n_sigma, signal, err_signal)
     text_to_plot_left += 'B ({0:.0f}$\\sigma$) = {1:.0f} $\\pm$ {2:.0f}'.format(n_sigma, bkg, error_bkg)
@@ -196,6 +193,159 @@ def fit_inv_mass_root(histogram, config_inv_mass, fix_mean=None, fix_sigma=None)
     return fit_mass
 
 
+def fit_d_meson_mass(df, n_bins='auto', min_hist=1.7, max_hist=2.1, **kwargs):
+    inv_mass = df['InvMass']
+    weight = df['Weight']
+
+    if isinstance(n_bins, str):
+        bins = np.array(np.histogram_bin_edges(inv_mass, bins=n_bins, range=(min_hist, max_hist)), dtype='float64')
+        histogram = ROOT.TH1F("MassFit", "MassFit", 2 * (len(bins) - 1), min_hist, max_hist)
+    else:
+        histogram = ROOT.TH1F("MassFit", "MassFit", n_bins, min_hist, max_hist)
+
+    histogram.Sumw2()
+    rnp.fill_hist(histogram, inv_mass, weights=weight)
+
+    fit = fit_inv_mass_root(histogram, kwargs['inv_mass_lim']['default'])
+    return fit
+
+
+def correlation_signal_region(df, fit, n_sigma, suffix='_d', axis=()):
+    mean, sigma = (fit.GetMean(), fit.GetSigma())
+    signal = select_inv_mass(df, mean - n_sigma * sigma, mean + n_sigma * sigma, suffix=suffix)
+    signal_corr = Histogram.from_dataframe(signal, axis)
+
+    return signal_corr
+
+
+def correlation_background_region(df, fit, n_sigma_min, n_sigma_max, suffix='_d', axis=()):
+    mean, sigma = (fit.GetMean(), fit.GetSigma())
+
+    right = select_inv_mass(df, mean - n_sigma_max * sigma, mean - n_sigma_min * sigma, suffix=suffix)
+    left = select_inv_mass(df, mean - n_sigma_max * sigma, mean - n_sigma_min * sigma, suffix=suffix)
+
+    bkg = pd.concat([right, left])
+    bkg_corr = Histogram.from_dataframe(bkg, axis)
+    return bkg_corr
+
+
+def get_n_bkg_sidebands(fit, n_sigma_min, n_sigma_max):
+    mean, sigma = (fit.GetMean(), fit.GetSigma())
+
+    background_sidebands_1 = ROOT.Double()
+    error_bkg_sidebands_1 = ROOT.Double()
+    fit.Background(mean - n_sigma_max * sigma, mean - n_sigma_min * sigma, background_sidebands_1,
+                   error_bkg_sidebands_1)
+
+    background_sidebands_2 = ROOT.Double()
+    error_bkg_sidebands_2 = ROOT.Double()
+    fit.Background(mean + n_sigma_min * sigma, mean + n_sigma_max * sigma, background_sidebands_2,
+                   error_bkg_sidebands_2)
+    background_sidebands = background_sidebands_1 + background_sidebands_2
+    error_bkg_sidebands = np.sqrt(error_bkg_sidebands_1 ** 2 + error_bkg_sidebands_2 ** 2)
+
+    return float(background_sidebands), float(error_bkg_sidebands)
+
+
+def get_n_signal(fit, n_sigma):
+    signal = ROOT.Double()
+    err_signal = ROOT.Double()
+    fit.Signal(n_sigma, signal, err_signal)
+    return float(signal), float(err_signal)
+
+
+def get_n_bkg(fit, n_sigma):
+    bkg = ROOT.Double()
+    err_bkg = ROOT.Double()
+    fit.Background(n_sigma, bkg, err_bkg)
+    return float(bkg), float(err_bkg)
+
+
+def get_significance(fit, n_sigma):
+    signif = ROOT.Double()
+    err_signif = ROOT.Double()
+    fit.Significance(n_sigma, signif, err_signif)
+    return float(signif), float(err_signif)
+
+
+def normalize_mixed_event(histogram):
+    p1 = histogram.data['Content'].loc[0. + 0.0001, 0. + 0.0001]
+    # p2 = histogram.data['Content'].loc[0. + 0.0001, 0. - 0.0001]
+    p2 = p4 = 0.
+    p3 = histogram.data['Content'].loc[0. - 0.0001, 0. + 0.0001]
+    # p4 = histogram.data['Content'].loc[0. - 0.0001, 0. - 0.0001]
+
+    # TODO: Add finite bin correction
+    counts_at_0 = (p1 + p2 + p3 + p4) / 2.
+    return histogram / counts_at_0
+
+
+def correlation_dmeson(df_pairs, config_corr, n_sigma_sig=2., n_sigma_bkg_min=4., n_sigma_bkg_max=8.,
+                       suffixes=('_d', '_e'),
+                       axis=('CentralityBin', 'VtxZBin', 'DPtBin', 'EPtBin', 'DeltaEtaBin', 'DeltaPhiBin'),
+                       plot=False, identifier=('GridPID', 'EventNumber')):
+    d_in_this_pt = reduce_to_single_particle(df_pairs, suffixes[0])
+    e_in_this_pt = reduce_to_single_particle(df_pairs, suffixes[1])
+
+    # Fit Invariant Mass
+    fit = fit_d_meson_mass(d_in_this_pt, **config_corr.correlation)
+
+    n_signal, err_n_signal = get_n_signal(fit, n_sigma_sig)
+    n_bkg_sidebands, err_n_bkg_sb = get_n_bkg_sidebands(fit, n_sigma_bkg_min, n_sigma_bkg_max)
+    n_bkg_signal_region, err_n_bkg_signal_region = get_n_bkg(fit, n_sigma_sig)
+
+    # Same Event
+    signal_corr = correlation_signal_region(df_pairs, fit, n_sigma_sig, axis=['DeltaEtaBin', 'DeltaPhiBin'])
+    bkg_corr = correlation_background_region(df_pairs, fit, n_sigma_bkg_min,
+                                             n_sigma_bkg_max, axis=['DeltaEtaBin', 'DeltaPhiBin'])
+
+    # Mixed event
+    df_mixed_pairs = build_pairs(d_in_this_pt, e_in_this_pt, suffixes=suffixes, identifier=identifier, is_mixed=True,
+                                 **config_corr.correlation)
+    signal_corr_mix = correlation_signal_region(df_mixed_pairs, fit, n_sigma_sig,
+                                                axis=['DeltaEtaBin', 'DeltaPhiBin'])
+    bkg_corr_mix = correlation_background_region(df_mixed_pairs, fit, n_sigma_bkg_min, n_sigma_bkg_max,
+                                                 axis=['DeltaEtaBin', 'DeltaPhiBin'])
+    # Division by M(0,0)
+    signal_corr_mix = normalize_mixed_event(signal_corr_mix)
+    bkg_corr_mix = normalize_mixed_event(bkg_corr_mix)
+
+    # Same/mixed
+    corrected_signal_corr = signal_corr.project('DeltaPhiBin') / (
+            signal_corr_mix.project('DeltaPhiBin') / signal_corr.get_n_bins('DeltaEtaBin'))
+
+    # normalize the background correlation
+    corrected_bkg_corr = bkg_corr.project('DeltaPhiBin') / (
+            bkg_corr_mix.project('DeltaPhiBin') / bkg_corr.get_n_bins('DeltaEtaBin'))
+    corrected_bkg_corr = corrected_bkg_corr / n_bkg_sidebands * n_bkg_signal_region
+    bkg_corr = bkg_corr / n_bkg_sidebands * n_bkg_signal_region
+
+    if n_signal > 0:
+        d_meson_corr = (corrected_signal_corr - corrected_bkg_corr) / n_signal
+    else:
+        d_meson_corr = Histogram()
+
+    if plot:
+        fig, ax = plt.subplots()
+        plot_inv_mass_fit(fit, ax, **config_corr.style_qa)
+    else:
+        ax = None
+
+    signif, err_signif = get_significance(fit, n_sigma_sig)
+
+    result = pd.DataFrame({'InvMassFit': ax, 'DMesonCorr': d_meson_corr,
+                           'SignalRegCorr': signal_corr, 'NSignal': n_signal, 'NSignalErr': err_n_signal,
+                           'SignalRegCorrMix': signal_corr_mix,
+                           'BkgRegCorr': bkg_corr, 'NBkgSideBands': n_bkg_sidebands, 'NBkgSideBandsErr': err_n_bkg_sb,
+                           'BkgRegCorrMix': bkg_corr_mix,
+                           'NBkgSignalReg': n_bkg_signal_region, 'NBkgSignalRegErr': err_n_bkg_signal_region,
+                           'Significance': signif, 'Significance error': err_signif},
+                          index=[0])
+    # Problem in the automatic python bindings: the destructor is called twice. Calling it manually fix it.
+    del fit
+    return result
+
+
 def prepare_single_particle_df(df, suffix, **kwargs):
     """"Preprocessor before calculating the pairs. Takes place 'inplace' (changes df).
     Changes the names of the columns by appending the suffix.
@@ -264,33 +414,33 @@ def convert_to_range(dphi):
     return dphi
 
 
-def build_pairs(trigger, associated, suffixes=('_d', '_e'), identifier=('GridPID', 'EventNumber'), **kwargs):
+def build_pairs(trigger, associated, suffixes=('_d', '_e'), identifier=('GridPID', 'EventNumber'), is_mixed=False,
+                n_to_mix=500, **kwargs):
     """"Builds a DataFrame with pairs of trigger and associated particles.
-
-    identifier should have be present in both trigger and associated.
-    suffixes are (in order) the values which will be used to name the trigger and associated particles
-
     This should always be the first step in the analysis.
     It assures that all trigger and associated particles are in the same event.
     This could have been lost since selections were applied on each of them.
 
-    Returns a dataframe with the pairs, other one with the triggers and another one with the associated
-    It is more convenient to use the pairs to build correlations and the individual for normalizations (and for mixing).
-
+    Returns a dataframe with the pairs
 
     Parameters
     ----------
-    trigger : pd.Dataframe
+    trigger : pd.DataFrame
         DataFrame with the trigger particles
-    associated : pd.Dataframe
+    associated : pd.DataFrame
         DataFrame with associated particles
-    suffixes:
-    identifier:
+    suffixes: tuple
+        suffixes are (in order) the values which will be used to name the trigger and associated particles
+    identifier: tuple
+        Column use to identify the particles. Should have be present in both trigger and associated.
     kwargs : dict
-        Information
+        Information used to build the correlation function
 
     Returns
     -------
+    correlation: pd.Dataframe
+        A DataFrame with the information of trigger and associated particles. The angular differences in phi and eta are
+        also calculated in the columns DeltaPhi, DeltaEta (binned in DeltaPhiBin and DeltaEtaBin)
 
     Raises
     ------
@@ -303,6 +453,9 @@ def build_pairs(trigger, associated, suffixes=('_d', '_e'), identifier=('GridPID
     if not isinstance(associated, pd.DataFrame):
         raise TypeError('Value passed for assoc is not a DataFrame')
 
+    if isinstance(identifier, (str, float)):
+        identifier = tuple([identifier])
+
     # Copy the DataFrames to avoid changing the original ones
     trigger = trigger.copy()
     associated = associated.copy()
@@ -314,7 +467,22 @@ def build_pairs(trigger, associated, suffixes=('_d', '_e'), identifier=('GridPID
     # Build the correlation pairs
     feat_on_left = [str(x) + suffixes[0] for x in identifier]
     feat_on_right = [str(x) + suffixes[1] for x in identifier]
-    correlation = trigger.merge(associated, left_on=feat_on_left, right_on=feat_on_right)
+
+    if is_mixed:
+        trig_mix = pd.concat([trigger] * n_to_mix, ignore_index=True)
+        assoc_mix = pd.concat(skutils.shuffle([associated] * n_to_mix), ignore_index=True)
+        correlation = trig_mix.join(assoc_mix, rsuffix='x', lsuffix='y')
+        del trig_mix, assoc_mix
+
+        is_same_event = correlation[correlation.columns[0]] == correlation[correlation.columns[0]]  # set all to true
+
+        for col in identifier:
+            is_same_event = is_same_event & (correlation[col + suffixes[0]] == correlation[col + suffixes[1]])
+
+        correlation = correlation[~is_same_event]
+
+    else:  # Same Event
+        correlation = trigger.merge(associated, left_on=feat_on_left, right_on=feat_on_right)
 
     fill_missing_value(correlation, 'Centrality', suffixes, kwargs['bins_cent'], 1.0)
     fill_missing_value(correlation, 'VtxZ', suffixes, kwargs['bins_zvtx'], 1.0)
@@ -368,3 +536,37 @@ def select_inv_mass(df, min_mass, max_mass, suffix=''):
 
     selected = ((df['InvMass' + suffix] >= min_mass) & (df['InvMass' + suffix] <= max_mass))  # Check max_mass
     return df[selected]
+
+
+def mix(trigger, assoc_pool):
+    print(trigger.name)
+    selected_assoc = assoc_pool.fast_sample()
+    for col in trigger.index:
+        selected_assoc[col] = trigger.loc[col]
+    return selected_assoc
+
+
+class MixingSampler:
+    """Class used to generate pseudo random data for the event mixing.
+    It is not necessary to have independent random values for each trigger candidate, so it is much faster than using
+    pd.DataFrame.sample.
+    """
+
+    def __init__(self, df, n_to_sample):
+        self.data = df.copy()
+        self.n_to_sample = n_to_sample
+        self.n_iter = 0
+        self.shuffle_counter = 0
+        self.data_size = len(self.data)
+        self.data.sample(frac=1.)
+
+    def fast_sample(self):
+        # Check if it is needed to shuffle. Skip this iteration since it does not fit in the data
+        if int((self.n_iter * self.n_to_sample) / self.data_size) > self.shuffle_counter:
+            self.data.sample(frac=1.)
+            self.shuffle_counter += 1
+            self.n_iter += 1
+
+        start_idx = (self.n_iter * self.n_to_sample) % self.data_size
+        self.n_iter += 1
+        return self.data.iloc[start_idx:start_idx + self.n_to_sample]

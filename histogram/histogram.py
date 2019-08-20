@@ -187,6 +187,38 @@ class Histogram:
         bins = [float(x) for x in bins]
         return bins
 
+    def get_n_bins(self, axis):
+        """Returns the number of bins for axis
+
+         Parameters
+        ----------
+        axis: str
+            The axis which the bins will be calculated
+
+        Returns
+        -------
+        bins : list
+            bins of axis.
+
+        """
+        return len(self.get_bins(axis)) - 1
+
+    def get_bin_categories(self, axis):
+        """Returns the bin intervals for axis in the form a series of pd.Interval
+        Useful to operate in the bins
+         Parameters
+        ----------
+        axis: str
+            The axis which the bins will be calculated
+
+        Returns
+        -------
+        bins : list
+            bins of axis.
+
+        """
+        return pd.Series(self.data.index.get_level_values(axis).categories)
+
     def get_bin_center(self, axis):
         """Returns the central value for each bin in axis.
 
@@ -235,7 +267,8 @@ class Histogram:
         projection : Histogram
             A new Histogram that represents the histogram in the dimensions specified in axis
         """
-
+        if isinstance(axis, str):
+            axis = [axis]
         projection = self.range.reset_index().groupby(by=list(axis))['Content', 'SumWeightSquare'].sum()
         projection['Error'] = np.sqrt(projection["SumWeightSquare"])
         projection = Histogram(projection)
@@ -385,6 +418,53 @@ class Histogram:
 
         kwargs.update({'label': label})
 
+        if plot_type == 'error_bar':
+            ax.errorbar(x, y, yerr=y_err, xerr=x_err, fmt='o', **kwargs)
+        elif plot_type == 'bar':
+            ax.bar(x, y, width=2. * np.array(x_err), **kwargs)
+        else:
+            raise AttributeError('Plot not defined')
+
+        return ax
+
+    def plot2d(self, axis, ax=None, plot_type='error_bar', label='', **kwargs):
+        """ Plot the histogram in one dimension. Uses matplotlib errorbar or bar or bar.
+
+        Parameters
+        ----------
+        axis: str
+            axis which the histogram will be plotted.
+        ax: plt.axes
+            Axes used to plot the histogram. A new object is created if ax=None.
+        plot_type: str
+            Type of the plot. It can be error_bar (show errors in y) or bar.
+        norm_hist: bool
+            If True, the contents is divided by the sum of contents. The errors are properly scaled, but do not take
+            error of the sum.
+        label: str
+            Label of the plot.
+
+        Returns
+        -------
+        ax : plt.axes
+            Axes with the histogram plotted.
+
+        """
+        import matplotlib.pyplot as plt
+
+        if ax is None:
+            fig, ax = plt.subplots()
+
+        data_local = self.data.reset_index()
+
+        x = list(data_local[axis[0]].categories.values.mid)
+        y = list(data_local[axis[1]].categories.values.mid)
+        weights = list(data_local['Content'])
+
+        bins_x = self.get_bins(axis[0])
+        bins_y = self.get_bins(axis[1])
+
+        ax.hist2d(x, y, [bins_x, bins_y], weights=weights)
         if plot_type == 'error_bar':
             ax.errorbar(x, y, yerr=y_err, xerr=x_err, fmt='o', **kwargs)
         elif plot_type == 'bar':

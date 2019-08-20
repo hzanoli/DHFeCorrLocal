@@ -15,15 +15,23 @@ def expand_array_cols(df):
     return df
 
 
-def preprocess(file_name, identifier, configuration_name):
+def preprocess(file_name, identifier, configuration_name, configuration_name_to_save=None, save=True):
     electron, d_meson = reader.read_root_file(file_name, configuration_name)
     # expand_array_cols(electron) #Electrons need to keep all the information, they are from the NHFe one
     d_meson = expand_array_cols(d_meson)
     sl.build_additional_features_dmeson(d_meson)
     sl.build_additional_features_electron(electron)
 
-    reader.save(electron, configuration_name, 'electron', identifier)
-    reader.save(d_meson, configuration_name, 'd_meson', identifier)
+    reader.reduce_dataframe_memory(d_meson)
+    reader.reduce_dataframe_memory(electron)
+
+    if save:
+        if configuration_name_to_save is None:
+            configuration_name_to_save = configuration_name
+        reader.save(electron, configuration_name_to_save, 'electron', identifier)
+        reader.save(d_meson, configuration_name_to_save, 'd_meson', identifier)
+    else:
+        return electron, d_meson
 
 
 if __name__ == '__main__':

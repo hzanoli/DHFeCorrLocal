@@ -48,6 +48,7 @@ tree_name : dict
 
 import warnings
 import pandas as pd
+import numpy as np
 
 try:
     import ROOT
@@ -78,32 +79,32 @@ def set_base_folder_name(name):
     base_folder_name = name
 
 
-def convert_to_pandas(file_name, folder_name, tree_name_local, branch=None):
-    file_root = ROOT.TFile(file_name)
-    ROOT.gDirectory.cd(folder_name)
-    tree = ROOT.gDirectory.Get(tree_name_local)
+def convert_to_pandas(file_name, folder_name, tree_name_local, **kwargs):
 
-    if branch is not None:
-        df = pd.DataFrame(root_numpy.tree2array(tree, branches=branch))
-    else:
-        df = pd.DataFrame(root_numpy.tree2array(tree))
 
-    file_root.Close()
     return df
 
 
-def read_root_file(file_name, configuration_name):
+def read_root_file(file_name, configuration_name, particles=('electron', 'dmeson'), **kwargs):
     """Read the root file with name file_name (should include the path to the file) and configuration named
     configuration_name. Returns DataFrame with the contents of the associated ROOT.TTree.
 
     Parameters
     ----------
-    file_name : str
+    file_name : str or list with str
         Name of the file that contains the ROOT TTree. Should contain the path to the file.
+        In case multiple files are provided in a list, all of them are loaded. In this case it is recommended to use
+        the kwarg  chunksize with the number of rows (chunksize=2500000 is recommended for 16GB of RAM)
 
     configuration_name: str
         The name of the configuration. It can be obtained by checking the name of the folder inside file_name. It should
         start with the value set to base_folder_name. It is a parameter in the AddTask.
+
+    particles: tuple
+        name of the trees that contain the particles
+
+    **kwargs:
+        parameters to be forwarded to root_pandas.read_root
 
     Returns
     -------
@@ -113,13 +114,16 @@ def read_root_file(file_name, configuration_name):
         DataFrame with the D meson data
 
     """
+    from root_pandas import read_root
 
     folder_name = base_folder_name + configuration_name
 
-    electrons = convert_to_pandas(file_name, folder_name, tree_name["electron"])
-    dmesons = convert_to_pandas(file_name, folder_name, tree_name["dmeson"])
+    data_frames = [read_root(file_name, folder_name + '/' + tree_name[x], **kwargs) for x in particles]
 
-    return electrons, dmesons
+    if len(data_frames) == 1:
+        data_frames = data_frames[0]
+
+    return data_frames
 
 
 def save(df, configuration_name, particle, run_number):
@@ -147,7 +151,7 @@ def save(df, configuration_name, particle, run_number):
         os.mkdir(storage_location + configuration_name)
 
     df.to_parquet(storage_location + configuration_name + r"/" + str(run_number) + '_' + particle + '.parquet',
-                  index=False)
+                  index=False, compression='brotli')
 
 
 def load(configuration_name, particle, run_number=None):
@@ -207,3 +211,15 @@ def load(configuration_name, particle, run_number=None):
         result_dataset.drop('InvMassD0', axis='columns', inplace=True)
 
     return result_dataset
+
+
+def get_friendly_root_file_name(file):
+    return file.split('/')[-1][:-5]
+
+
+def reduce_dataframe_memory(df):
+    for col in df.columns[df.dtypes == 'float64']:
+        df[col] = df[col].astype(np.float32)
+
+    for col in df.columns[df.dtypes == 'int64']:
+        df[col] = df[col].astype(np.int32)

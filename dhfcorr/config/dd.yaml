@@ -1,0 +1,5 @@
+base_folder: 'hmv0_dd'
+
+correlation:
+  bins_assoc: [2., 5.]
+  bins_trig: [5.5, 24.]

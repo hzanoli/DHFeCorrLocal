@@ -1,44 +1,67 @@
 import ROOT
 import numpy as np
 import pandas as pd
+import seaborn as sns
+
+import dhfcorr.config_yaml as configyaml
 import dhfcorr.correlate as corr
+import dhfcorr.io.data_reader as reader
 
-variables_to_keep_D = ['GridPID', 'EventNumber', 'ID', 'IsParticleCandidate', 'Pt', 'Eta', 'Phi', 'InvMass',
-                       'prediction']
+variables_to_keep_trig = ['GridPID', 'EventNumber', 'ID', 'IsParticleCandidate', 'Pt', 'Eta', 'Phi', 'InvMass',
+                          'prediction']
+variables_to_keep_assoc = ['GridPID', 'EventNumber', 'Charge', 'Pt', 'Eta', 'Phi', 'InvMassPartnersULS',
+                           'InvMassPartnersLS']
+index = ['GridPID', 'EventNumber']
 
-variables_to_keep_e = ['GridPID', 'EventNumber', 'Centrality', 'VtxZ', 'Charge', 'Pt', 'Eta', 'Phi',
-                       'InvMassPartnersULS', 'InvMassPartnersLS']
+df = reader.load('D0_HMV0', ['dmeson', 'electron'], columns=variables_to_keep_trig, index=index, lazy=True)
 
-df_e = pd.read_parquet('selected_e.parquet')
-df_e = df_e[variables_to_keep_e]
+config_corr = configyaml.ConfigYaml('dhfcorr/config/optimize_bdt_cut.yaml')
 
-df_d = pd.read_parquet('selected_ml.parquet')
-cuts_pt = pd.read_pickle('cut_bdt.pkl')
+pt_bins_trig = config_corr.values['correlation']['bins_trig']
+pt_bins_assoc = config_corr.values['correlation']['bins_assoc']
+trig_suffix = '_t'
+assoc_suffix = '_a'
 
-df_d['InvMass'] = df_d['InvMassD0']
-df_d = df_d[variables_to_keep_D]
+inv_mass_trig_list = list()
 
-config_corr = corr.CorrConfig('dhfcorr/config/optimize_bdt_cut.yaml')
-pairs = corr.build_pairs(df_d, df_e, **config_corr.correlation)
+pairs = corr.build_pairs_from_lazy(df, (trig_suffix, assoc_suffix), pt_bins_trig, pt_bins_assoc,
+                                   **config_corr.values['correlation'])
 
-# Calculate the invariant mass for each (D meson, electron) pT bin
-values_to_cut_dbt = np.linspace(0.4, 1.0, 180, endpoint=False)
+selected = pd.read_pickle('pairs_d_hfe_hm.pkl').reset_index(level=0, drop=True)
 
 # Remove ROOT messages
 ROOT.gPrintViaErrorHandler = ROOT.kTRUE
 ROOT.gErrorIgnoreLevel = ROOT.kWarning
 
+values_to_cut_dbt = np.linspace(0.8, 1.0, 200, endpoint=False)
+
 result_optimization = list()
 for cut in values_to_cut_dbt:
+    print()
+    print("Changing the bdt output cut to:")
     print(cut)
-    selected = pairs[pairs['prediction_d'] > cut]
-    correlation_dist = selected.groupby(['EPtBin', 'DPtBin']).apply(
-        lambda x: corr.correlation_dmeson(x, config_corr=config_corr))
-    correlation_dist['Error_corr'] = correlation_dist['DMesonCorr'].apply(lambda x: x.data['Error'].iloc[0])
-    correlation_dist['Error_corr_percent'] = correlation_dist['DMesonCorr'].apply(
-        lambda x: x.data['Error'].iloc[0] / x.data['Content'].iloc[0])
+    print()
+    selected = selected[selected['prediction' + trig_suffix] > cut]
+    correlation_dist = selected.groupby(['APtBin', 'TPtBin']).apply(
+        lambda x: corr.correlation_dmeson(x, suffixes=('_t', '_a'), mix=False, **config_corr.values['correlation']))
+
+
+    def get_error(x, percent=False):
+        try:
+            if percent:
+                return x.data['Error'].iloc[0] / x.data['Content'].iloc[0]
+            else:
+                return x.data['Error'].iloc[0]
+        except IndexError:
+            return np.nan
+
+
+    correlation_dist['Error_corr'] = correlation_dist['DMesonCorr'].apply(get_error)
+    correlation_dist['Error_corr_percent'] = correlation_dist['DMesonCorr'].apply(get_error, percent=True)
     correlation_dist['Cut'] = cut
+
     result_optimization.append(correlation_dist)
 
 result = pd.concat(result_optimization)
+
 result.to_pickle('optimization_bdt_cut.pkl')

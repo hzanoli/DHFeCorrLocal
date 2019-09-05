@@ -1,8 +1,10 @@
 import numpy as np
 import pandas as pd
 import warnings
-from dhfcorr.config_yaml import ConfigYaml
-
+import dhfcorr.config_yaml as configyaml
+import dhfcorr.definitions as definitions
+import dhfcorr.io.data_reader as reader
+import dhfcorr.correlation_utils as utils
 
 class Cuts(object):
 
@@ -25,7 +27,7 @@ class Cuts(object):
 
     def __init__(self, name_file, particle='D0'):
         """Default constructor. yaml_file should come from the class CutsYaml. The particle is set as Default to D0 """
-        yaml_config = ConfigYaml(name_file)
+        yaml_config = configyaml.ConfigYaml(name_file)
         try:
             d_meson_cuts = yaml_config.values[particle]['cuts']
         except KeyError as key_error:
@@ -163,5 +165,46 @@ def get_reflected_dmesons(df):
     return df[~(particles | antiparticles)]
 
 
+def filter_df(df_x, cuts, suffix):
+    pt_bin = df_x.name
+    cut = float(cuts.loc[pt_bin])
+    return df_x[df_x['prediction' + suffix] >= cut]
+
+
 def build_additional_features_electron(df):
     pass
+
+
+def selection_pairs(config_file=None, suffix='_t'):
+    config_file = configyaml.ConfigYaml(config_file)
+    base_folder = config_file.values['base_folder']
+
+    file_selection = base_folder + '/' + config_file.values['selection_ml']['selection_ml_file']
+    print("Reading configuration file for ML cuts:" + file_selection)
+    df_cuts = pd.read_pickle(file_selection)
+
+    print("Reading file with the raw pairs")
+    data_sample = reader.load_pairs(config_file, 'raw')
+
+    print("Applying Cuts in Pt")
+    data_sample['PtBinML'] = pd.cut(data_sample['Pt' + suffix], config_file.values['selection_ml']['bins_trig_ml'])
+    data_sample = data_sample.groupby('PtBinML').apply(lambda x: filter_df(x, df_cuts, suffix)).reset_index(
+        level=0, drop=True)
+
+    reader.save_pairs(data_sample, config_file, 'selected')
+
+
+if __name__ == '__main__':
+    """"Select the pairs.
+    The first argument is the name of the file that contain the pairs of D-e. If none is provided, the default name 
+    from definitions.py is used.
+    The second argument is the name of the configuration yaml file. If none is provided, the default one is used.
+    """
+    import sys
+
+    try:
+        config = sys.argv[1]
+    except IndexError:
+        config = None
+
+    selection_pairs(config)

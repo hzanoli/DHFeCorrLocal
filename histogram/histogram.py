@@ -9,6 +9,8 @@ class Histogram:
 
     Attributes
     ----------
+    title: str
+        Title of the Histogram
     data : pd.DataFrame
         Data of the histogram. It has three columns: 'Content', 'SumWeightSquare' and 'Error'.
         The index represents the axis of the histogram.
@@ -18,7 +20,7 @@ class Histogram:
         #TODO: Methods to implement the range selection
     """
 
-    def __init__(self, df=None):
+    def __init__(self, df=None, title=''):
         """" Default constructor.
 
         This is used mostly internally or as a copy constructor. Use from_dataframe in case
@@ -28,11 +30,15 @@ class Histogram:
         ----------
         df : Histogram or pd.DataFrame or None
             DataFrame with the values which will be used to calculate the histogram.
+        title: str
+            title of the histogram
 
         """
-
+        self.title = title
         if isinstance(df, Histogram):
             self.data = df.data.copy()
+            if title == '':
+                self.title = df.title
         elif df is None:
             self.data = pd.DataFrame(None, columns=['Content', 'SumWeightSquare', 'Error'])
         elif isinstance(df, pd.DataFrame):
@@ -53,7 +59,7 @@ class Histogram:
         self.range = self.data  # range should be just a view of self.data
 
     @staticmethod
-    def from_dataframe(df, axis):
+    def from_dataframe(df, axis, title=''):
         """Create a n-dimensional histogram from df. The dataframe df should have been binned before passing
         it to this class. Each value passed in axis will be grouped by and it should be binned.
 
@@ -62,15 +68,22 @@ class Histogram:
         df : pd.DataFrame
             DataFrame with the values which will be used to calculate the histogram.
 
-        axis: tuple or list
+        axis: str, tuple or list
             The features which will aggregated in the histogram (which one is a different 'axis'). The features should
             have been binned before passing df to this function
+
+        title: str
+            the title of the histogram
 
         Returns
         -------
         Histogram
             A new histogram with df
         """
+
+        if isinstance(axis, str):
+            axis = [axis]
+
         # TODO: include 0-count bins
         if not isinstance(df, pd.DataFrame):
             raise TypeError('df should be a DataFrame')
@@ -82,21 +95,21 @@ class Histogram:
 
         df_local['WeightSquare'] = df_local['Weight'] ** 2
 
-        grouped = df_local.groupby(by=list(axis))
+        grouped = df_local.groupby(by=list(axis)).sum().fillna(0.)
 
         # Counts are the sum of the Weights
-        counts = pd.DataFrame(grouped['Weight'].sum())
+        counts = pd.DataFrame(grouped['Weight'])
 
         counts.columns = ['Content']
         # Sums the WeightSquare to keep the information used for the error calculation
-        counts['SumWeightSquare'] = grouped['WeightSquare'].sum()
+        counts['SumWeightSquare'] = grouped['WeightSquare']
         # Creates a error columns to make it easier to read
         counts['Error'] = np.sqrt(counts["SumWeightSquare"])
 
-        return Histogram(counts)
+        return Histogram(counts, title)
 
     @staticmethod
-    def from_dataframe_cut(df, axis_and_bins):
+    def from_dataframe_cut(df, axis_and_bins, title=''):
         """Create a n-dimensional histogram from df. The dataframe df will be cut using the information from
         axis_and_bins.
 
@@ -108,11 +121,13 @@ class Histogram:
         axis_and_bins: dict
             dict with the axis names and its bins. Example: {'x' : [0, 1., 3.,], 'y': 50)
             The values will be passed to pd.cut, any type accepted by pd.cut can be used here.
+        title:
+            the title of the histogram
 
         Returns
         -------
         Histogram
-            This histogram a new histogram object
+            This histogram (a new histogram object)
         """
         if not isinstance(df, pd.DataFrame):
             raise TypeError('df should be a DataFrame')
@@ -122,7 +137,7 @@ class Histogram:
         for key, values in axis_and_bins.items():
             df_local[key] = pd.cut(df[key], bins=values)
 
-        return Histogram.from_dataframe(df_local, axis_and_bins.keys())
+        return Histogram.from_dataframe(df_local, axis_and_bins.keys(), title)
 
     @staticmethod
     def from_root(root_hist):
@@ -167,6 +182,9 @@ class Histogram:
         """
         return Histogram(self.range)
 
+    def get_axis_names(self):
+        return list(self.data.index.names)
+
     def get_bins(self, axis):
         """Returns the bins for axis
 
@@ -181,8 +199,13 @@ class Histogram:
             bins of axis.
 
         """
-        left_side = list(self.data.index.get_level_values(axis).categories.values.left)
-        right_side = self.data.index.get_level_values(axis).categories.values.right
+        try:
+            left_side = list(self.data.index.get_level_values(axis).categories.values.left)
+            right_side = self.data.index.get_level_values(axis).categories.values.right
+        except AttributeError:
+            left_side = list(self.data.index.get_level_values(axis).left)
+            right_side = self.data.index.get_level_values(axis).right
+
         bins = left_side + [right_side[-1]]
         bins = [float(x) for x in bins]
         return bins
@@ -232,7 +255,10 @@ class Histogram:
         center : list
             center of the bins of axis.
         """
-        center = list(self.data.index.get_level_values(axis).categories.values.mid)
+        try:
+            center = list(self.data.index.get_level_values(axis).categories.values.mid)
+        except AttributeError:
+            center = list(self.data.index.get_level_values(axis).mid)
         center = [float(x) for x in center]
         return center
 
@@ -249,7 +275,10 @@ class Histogram:
         width : list
             the length of the bins on the axis
         """
-        width = list(self.data.index.get_level_values(axis).categories.values.length)
+        try:
+            width = list(self.data.index.get_level_values(axis).categories.values.length)
+        except AttributeError:
+            width = list(self.data.index.get_level_values(axis).length)
         width = [float(x) for x in width]
         return width
 
@@ -281,6 +310,8 @@ class Histogram:
 
         # Check if the two histograms have the same dimensions
         if not self.data.index.equals(other.data.index):
+            print(self.data.index)
+            print(other.data.index)
             raise ValueError("The axis of the histograms do not match.")
 
         # Adds the  contents of the two histogram by summing ['Content', 'SumWeightSquare', 'Error']
@@ -374,6 +405,16 @@ class Histogram:
 
             return Histogram(new_df)
 
+    def multi_plot1d(self, axis, **kwargs):
+        groups_to_groupby = self.get_axis_names()
+        groups_to_groupby.remove(axis)
+        return self.data.groupby(groups_to_groupby).apply(lambda x: Histogram(x).plot1d(axis, **kwargs))
+
+    def decompose_in_single_histograms(self, axis):
+        groups_to_groupby = self.get_axis_names()
+        groups_to_groupby.remove(axis)
+        return self.data.groupby(groups_to_groupby).apply(lambda x: Histogram(x))
+
     def plot1d(self, axis, ax=None, plot_type='error_bar', label='', norm_hist=False, **kwargs):
         """ Plot the histogram in one dimension. Uses matplotlib errorbar or bar or bar.
 
@@ -465,12 +506,6 @@ class Histogram:
         bins_y = self.get_bins(axis[1])
 
         ax.hist2d(x, y, [bins_x, bins_y], weights=weights)
-        if plot_type == 'error_bar':
-            ax.errorbar(x, y, yerr=y_err, xerr=x_err, fmt='o', **kwargs)
-        elif plot_type == 'bar':
-            ax.bar(x, y, width=2. * np.array(x_err), **kwargs)
-        else:
-            raise AttributeError('Plot not defined')
 
         return ax
 
@@ -492,7 +527,6 @@ class Histogram:
             self.data['Content'] = self.data['Content'] / self.data['Content'].sum()
             self.data['Error'] = self.data['Error'] / self.data['Content'].sum()
             self.data['SumWeightSquare'] = self.data['Error'] * self.data['Error']
-
             return self
         else:
             return Histogram((self / self.data['Content'].sum()).data)

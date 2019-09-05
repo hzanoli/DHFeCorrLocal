@@ -49,12 +49,8 @@ tree_name : dict
 import warnings
 import pandas as pd
 import numpy as np
-
-try:
-    import ROOT
-    import root_numpy
-except ModuleNotFoundError:
-    warnings.warn("ROOT is not installed. Only pandas interface will work.", RuntimeWarning)
+import glob
+import dhfcorr.config_yaml as configyaml
 
 tree_name = dict({'electron': 'electron', 'dmeson': 'dmeson'})
 
@@ -79,12 +75,6 @@ def set_base_folder_name(name):
     base_folder_name = name
 
 
-def convert_to_pandas(file_name, folder_name, tree_name_local, **kwargs):
-
-
-    return df
-
-
 def read_root_file(file_name, configuration_name, particles=('electron', 'dmeson'), **kwargs):
     """Read the root file with name file_name (should include the path to the file) and configuration named
     configuration_name. Returns DataFrame with the contents of the associated ROOT.TTree.
@@ -94,7 +84,7 @@ def read_root_file(file_name, configuration_name, particles=('electron', 'dmeson
     file_name : str or list with str
         Name of the file that contains the ROOT TTree. Should contain the path to the file.
         In case multiple files are provided in a list, all of them are loaded. In this case it is recommended to use
-        the kwarg  chunksize with the number of rows (chunksize=2500000 is recommended for 16GB of RAM)
+        the kwarg chunksize with the number of rows (chunksize=2500000 is recommended for 16GB of RAM)
 
     configuration_name: str
         The name of the configuration. It can be obtained by checking the name of the folder inside file_name. It should
@@ -154,7 +144,70 @@ def save(df, configuration_name, particle, run_number):
                   index=False, compression='brotli')
 
 
-def load(configuration_name, particle, run_number=None):
+class LazyFileLoader:
+
+    def __init__(self, file='', index=None, columns=None):
+        self.file_name = file
+        self.columns = columns
+        self.index = index
+
+    def __copy__(self):
+        return LazyFileLoader(self.file_name, self.index, self.columns)
+
+    def load(self, columns=None, index=None):
+        if columns is None:
+            columns = self.columns
+        if index is None:
+            index = self.index
+
+        if index is not None:
+            df = pd.read_parquet(self.file_name, columns=columns).set_index(index)
+        else:
+            df = pd.read_parquet(self.file_name, columns=columns)
+
+        reduce_dataframe_memory(df)
+
+        return df
+
+
+def get_file_name(config, stage):
+    file_name = None
+    base_folder = config.values['base_folder']
+    if stage == 'raw':
+        file_name = config.values['pair_file']
+    elif stage == 'selected':
+        file_name = config.values['selected_pair_file']
+
+    return file_name
+
+
+def load_pairs(config_file, stage='raw'):
+    if isinstance(config_file, configyaml.ConfigYaml):
+        config = config_file
+    else:
+        config = configyaml.ConfigYaml(config_file)
+
+    file_name = config.values['base_folder'] + '/' + get_file_name(config, stage)
+
+    print("Reading the file: " + str(file_name))
+    data_sample = pd.read_parquet(file_name)
+
+    data_sample['APtBin'] = pd.cut(data_sample['Pt_a'], config.values['correlation']['bins_assoc'])
+    data_sample['TPtBin'] = pd.cut(data_sample['Pt_t'], config.values['correlation']['bins_trig'])
+
+    return data_sample
+
+
+def save_pairs(data_sample, config_file, stage='raw'):
+    config = configyaml.ConfigYaml(config_file)
+    file_name = get_file_name(config, stage)
+    file_name = config.values['base_folder'] + '/' + file_name
+
+    print("Saving the file to: " + str(file_name))
+    data_sample.loc[:, data_sample.columns[data_sample.dtypes != 'category']].to_parquet(file_name)
+
+
+def load(configuration_name, particle, run_number=None, columns=None, index=None, lazy=False):
     """Loads the dataset from the default storage location. If run_number is a list, all the runs in the list will be
     merged.
 
@@ -164,11 +217,19 @@ def load(configuration_name, particle, run_number=None):
         The name of the configuration. It can be obtained by checking the name of the folder inside file_name. It should
         start with the value set to base_folder_name. It is a parameter in the AddTask.
 
-    particle: str
+    particle: str or list
         The particle name, such as ``electron` or ``dmeson``. The same name that was used to save it.
 
-    run_number: str or None
-        This is a unique identifier for each file. Usually the run number is used. If None, all files will be loaded
+    run_number: str, list or None
+        This is a unique identifier for each file. Usually the run number is used.
+        If None, the function will read all the files, unless lazy=True.
+
+    columns: list:
+        If not None, only these columns will be read from the file.
+
+    lazy: bool
+        In case run_number = None, lazy=True will not load all the files, but rather return a LazyFileLoader which needs
+        to be called with the load method to lead the data.
 
     Warnings
     ----------
@@ -181,29 +242,45 @@ def load(configuration_name, particle, run_number=None):
         If no data is loaded.
 
     """
+
+    if isinstance(particle, (str, int, float)):
+        particle = [particle]
+
     if isinstance(run_number, (str, int, float)):
         run_number = [run_number]
 
-    if run_number is not None:
-        file_list = [storage_location + configuration_name + r"/" + str(run) + '_' + particle + '.parquet' for run in
-                     run_number]
-    else:
-        import glob
-        file_list = glob.glob(storage_location + configuration_name + "/*" + particle + ".parquet")
-    data_sets = list()
+    if run_number is None:
+        # Find all the runs if no run is set
+        file_list = glob.glob(storage_location + configuration_name + "/*" + particle[0] + ".parquet")
+        run_list = [get_friendly_parquet_file_name(file, particle[0]) for file in file_list]
+        return load(configuration_name, particle, run_number=run_list, columns=columns, index=index, lazy=lazy)
 
+    file_list = [[storage_location + configuration_name + r"/" + str(run) + '_' + x + '.parquet' for x in particle]
+                 for run in run_number]
+
+    if lazy:
+        return [[LazyFileLoader(x, index=index, columns=col) for x, col in zip(list_run, columns)]
+                for list_run in file_list]
+
+    data_sets = list()
     for f in file_list:
-        try:
-            df = pd.read_parquet(f)
-            data_sets.append(df)
-        except OSError:
-            warnings.warn('It is not possible to load the files with run number = ' + str(run))
-            return None
+        for x in f:
+            try:
+                df = pd.read_parquet(x, columns=columns)
+                data_sets.append(df)
+            except OSError:
+                warnings.warn('It is not possible to load the files with run number = ' + str(run))
+                return None
 
     if len(data_sets) < 0:
         raise ValueError('No data was loaded.')
 
-    result_dataset = pd.concat(data_sets)
+    result_dataset = pd.concat(data_sets, sort=False)
+
+    if index is not None:
+        result_dataset.set_index(index, inplace=True)
+
+    reduce_dataframe_memory(result_dataset)
 
     # Temporary solution
     if 'InvMassD0' in result_dataset.columns:
@@ -215,6 +292,10 @@ def load(configuration_name, particle, run_number=None):
 
 def get_friendly_root_file_name(file):
     return file.split('/')[-1][:-5]
+
+
+def get_friendly_parquet_file_name(file, particle=''):
+    return file.split('/')[-1][:-9 - len(particle)]
 
 
 def reduce_dataframe_memory(df):

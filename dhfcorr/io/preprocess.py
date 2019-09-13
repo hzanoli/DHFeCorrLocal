@@ -17,7 +17,6 @@ def expand_array_cols(df):
 
 def preprocess(file_name, identifier, configuration_name, configuration_name_to_save=None, save=True):
     electron, d_meson = reader.read_root_file(file_name, configuration_name)
-    # expand_array_cols(electron) #Electrons need to keep all the information, they are from the NHFe one
     d_meson = expand_array_cols(d_meson)
     sl.build_additional_features_dmeson(d_meson)
     sl.build_additional_features_electron(electron)
@@ -40,6 +39,7 @@ if __name__ == '__main__':
     The second argument should be the folder that contains the root files to be converted.
     The third argument should be the folder that the files will be saved.
     """
+
     import sys
     import glob
 

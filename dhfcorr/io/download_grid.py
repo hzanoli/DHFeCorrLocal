@@ -45,7 +45,7 @@ def get_period_from_path(path):
     period = list_path[4]
     short_name = period[3:]
 
-    if not period.starstwith('LHC'):
+    if not period.startswith('LHC'):
         warnings.warn(
             "The period does not with LHC. Likely it was not produced with the derived dataset. Using train name instead")
         folders = list_path

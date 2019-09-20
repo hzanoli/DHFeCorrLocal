@@ -1,7 +1,23 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import subprocess
-import numpy as np
-import dhfcorr.definitions as definitions
+
+"""Tools to download from GRID to local cluster. 
+The cluster must have a working copy of alien (alien_cp and alien_token-init are used).
+
+In order to copy the files, follow the following procedure:
+
+1. In the LEGO train system, be sure to tick the option "Derived data production" After the train has finished, 
+the output won't be merged. This is done on purpose to avoid the merging of large files on GRID. 
+
+2. Check the path that the output was saved. For the HFCJ trains, you can check on:
+http://alimonitor.cern.ch/prod/jobs.jsp?t=6483. This link should also be available in the email that the system sends.
+Copy the content of "Output directory" and create a txt file with its content.
+
+3. Submit the download jobs using this script:
+$ python download_grid.py grid_username certificate_password location_txt_file destination_folder
+Check download_grid.py --help to a description of each parameter.
+
+"""
 
 
 def get_train_output_file_name(folder_path, file_name):
@@ -57,16 +73,11 @@ def download_train_opt(folder_path_alien, local_folder,
     print('Number of files in this path:' + str(len(files)))
 
     friendly_names = [get_friendly_file_name(x, train_name) for x in files]
-
-    def batch(sequence, n=1):
-        length = len(sequence)
-        for ndx in range(0, length, n):
-            yield sequence[ndx:min(ndx + n, length)]
-
-    current_job = 0
     size_jobs = len(files) / n_batches
     print("Number of jobs that will be submitted (approx.): " + str(size_jobs))
 
+    from dhfcorr.io.utils import batch, format_list_to_bash
+    current_job = 0
     for grid_file, local_file in zip(batch(files, n_batches), batch(friendly_names, n_batches)):
         local_file = [local_folder + '/' + period_base + '_' + x + '.root' for x in local_file]
         name_job = period_base + '_' + str(current_job)
@@ -79,22 +90,15 @@ def download_train_opt(folder_path_alien, local_folder,
     return size_jobs
 
 
-def format_list_to_bash(string_list):
-    merged = ''
-    for x in string_list:
-        merged += x + ','
-    return merged[:-1]
-
-
 if __name__ == '__main__':
     print("Downloading the output from the LEGO trains \n\n")
+    # image from https://www.asciiart.eu/vehicles/trains
     print("                 o  o  O  O\n"
           "            ,_____  ____    O\n"
           "            | LHC \_|[]|_'__Y\n"
           "            |_______|__|_|__|}\n"
           "=============oo--oo==oo--OOO\\====================\n\n")
 
-    import sys
     import dhfcorr.definitions as definitions
     import pandas as pd
 
@@ -105,7 +109,8 @@ if __name__ == '__main__':
     parser.add_argument("password", help='Password of the certificate in the .globus folder')
     parser.add_argument("txt_file", help='Text file (must end with .txt) with a list of paths to download. \n'
                                          'If the end is not .txt, it is assumed to be the path on grid.')
-    parser.add_argument("destination", help="Destination of the file that will be downloaded.")
+    parser.add_argument("destination", help="Destination of the file that will be downloaded. It is always added to "
+                                            "the basic definitions from the definitions.py file")
 
     args = parser.parse_args()
     user = args.user
@@ -129,4 +134,4 @@ if __name__ == '__main__':
             size = download_train_opt(folder, local_folder_path, user, password)
 
     else:
-        download_train_opt(txt_file, local_folder_path)
+        download_train_opt(txt_file, local_folder_path, user, password)

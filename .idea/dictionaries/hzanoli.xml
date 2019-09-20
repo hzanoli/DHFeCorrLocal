@@ -4,27 +4,36 @@
       <w>antipart</w>
       <w>cand</w>
       <w>cernbox</w>
+      <w>configyaml</w>
+      <w>confyaml</w>
       <w>containt</w>
       <w>dataframe</w>
+      <w>dhfcorr</w>
       <w>dmeson</w>
       <w>dphi</w>
       <w>errorbars</w>
+      <w>iloc</w>
       <w>linthreshx</w>
       <w>linthreshy</w>
       <w>matplotlib</w>
+      <w>nfiles</w>
       <w>normd</w>
       <w>nuls</w>
       <w>pdflatex</w>
       <w>ptbin</w>
       <w>ptbins</w>
+      <w>qsub</w>
       <w>rootsys</w>
       <w>savefig</w>
+      <w>signif</w>
+      <w>skutils</w>
       <w>sqrt</w>
       <w>symlog</w>
       <w>texbin</w>
       <w>warper</w>
       <w>wraper</w>
       <w>xlabel</w>
+      <w>zvtx</w>
     </words>
   </dictionary>
 </component>

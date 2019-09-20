@@ -51,10 +51,10 @@ import pandas as pd
 import numpy as np
 import glob
 import dhfcorr.config_yaml as configyaml
+import dhfcorr.definitions as definitions
+import random
 
-tree_name = dict({'electron': 'electron', 'dmeson': 'dmeson'})
-
-storage_location = "/Users/hzanoli/cernbox/postdoc/DHFeCorrLocal/data/"
+storage_location = definitions.DATA_FOLDER
 base_folder_name = "DHFeCorrelation_"
 
 
@@ -98,17 +98,15 @@ def read_root_file(file_name, configuration_name, particles=('electron', 'dmeson
 
     Returns
     -------
-    electrons : pd.DataFrame
-        DataFrame with the electron data
-    dmesons : pd.DataFrame
-        DataFrame with the D meson data
+    data_frames : list(pd.DataFrame)
+        DataFrame with the data of each tree
 
     """
     from root_pandas import read_root
 
     folder_name = base_folder_name + configuration_name
 
-    data_frames = [read_root(file_name, folder_name + '/' + tree_name[x], **kwargs) for x in particles]
+    data_frames = [read_root(file_name, folder_name + '/' + x, **kwargs) for x in particles]
 
     if len(data_frames) == 1:
         data_frames = data_frames[0]
@@ -140,8 +138,8 @@ def save(df, configuration_name, particle, run_number):
     if not os.path.isdir(storage_location + configuration_name):
         os.mkdir(storage_location + configuration_name)
 
-    df.to_parquet(storage_location + configuration_name + r"/" + str(run_number) + '_' + particle + '.parquet',
-                  index=False, compression='brotli')
+    name_to_save = storage_location + configuration_name + r"/" + str(run_number) + '_' + particle + '.parquet'
+    df.to_parquet(name_to_save, index=False)
 
 
 class LazyFileLoader:
@@ -207,7 +205,7 @@ def save_pairs(data_sample, config_file, stage='raw'):
     data_sample.loc[:, data_sample.columns[data_sample.dtypes != 'category']].to_parquet(file_name)
 
 
-def load(configuration_name, particle, run_number=None, columns=None, index=None, lazy=False):
+def load(configuration_name, particle, run_number=None, columns=None, index=None, sample_factor=None, lazy=False):
     """Loads the dataset from the default storage location. If run_number is a list, all the runs in the list will be
     merged.
 
@@ -227,6 +225,12 @@ def load(configuration_name, particle, run_number=None, columns=None, index=None
     columns: list:
         If not None, only these columns will be read from the file.
 
+    index: list or None:
+        The resulting dataframes will be indexed using the provided values. If None, the index is not meaningful.
+
+    sample_factor: None or float:
+        Loads only part of the files, if a number between 0 and 1 is provided.
+
     lazy: bool
         In case run_number = None, lazy=True will not load all the files, but rather return a LazyFileLoader which needs
         to be called with the load method to lead the data.
@@ -242,7 +246,6 @@ def load(configuration_name, particle, run_number=None, columns=None, index=None
         If no data is loaded.
 
     """
-
     if isinstance(particle, (str, int, float)):
         particle = [particle]
 
@@ -253,10 +256,18 @@ def load(configuration_name, particle, run_number=None, columns=None, index=None
         # Find all the runs if no run is set
         file_list = glob.glob(storage_location + configuration_name + "/*" + particle[0] + ".parquet")
         run_list = [get_friendly_parquet_file_name(file, particle[0]) for file in file_list]
-        return load(configuration_name, particle, run_number=run_list, columns=columns, index=index, lazy=lazy)
+        return load(configuration_name, particle, run_number=run_list, columns=columns, index=index,
+                    sample_factor=sample_factor, lazy=lazy)
 
     file_list = [[storage_location + configuration_name + r"/" + str(run) + '_' + x + '.parquet' for x in particle]
                  for run in run_number]
+
+    if sample_factor is not None:
+        if sample_factor > 1.:
+            raise ValueError("It is not possible to sample for than 1")
+        number_to_sample = int(sample_factor * len(file_list))
+        print("Sampling only " + str(number_to_sample) + ' out of ' + str(len(file_list)) + ' files')
+        file_list = random.sample(file_list, number_to_sample)
 
     if lazy:
         return [[LazyFileLoader(x, index=index, columns=col) for x, col in zip(list_run, columns)]

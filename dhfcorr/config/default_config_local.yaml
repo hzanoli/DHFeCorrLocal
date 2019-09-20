@@ -33,19 +33,26 @@ correlation_qa_style:
   x_range: [1.7,2.1]
   n_sigma_significance: 2.
 
+model_building:
+  bins_pt: [2., 2.5, 3., 3.5, 4., 5., 6., 7., 8., 10., 12., 16., 24, 9999.]
+  features: ['NormDecayLengthXY', 'CosP', 'CosPXY', 'ImpParXY', 'DCA', 'Normd0MeasMinusExp', 'PtDaughter0',
+             'PtDaughter1', 'ReducedChi2', 'D0Prod', 'CosTs', 'D0Daughter0', 'D0Daughter1', 'DecayLength',
+             'DecayLengthXY', 'NormDecayLength', 'NSigmaTPCDaughter0', 'NSigmaTOFDaughters0',
+             'NSigmaTPCDaughter1', 'NSigmaTOFDaughters1']
+  additional_features: ['SelectionStatusDefaultPID', 'InvMass', 'Pt', 'Eta']
+  additional_features_mc: ['IsD', 'IsParticleCandidate', 'IsParticle', 'IsPrompt']
+
 selection_ml:
   selection_ml_file: 'cut_bdt_sig.pkl'
-  bins_trig_ml: [2., 2.25, 2.5, 2.75, 3., 3.5, 4., 4.5, 5., 5.5, 6., 7., 8., 9.0, 10., 11., 12., 14., 16.,
+  bins_trig_ml: [2., 2.25, 2.5, 2.75, 3., 3.5, 4., 5., 6., 7., 8., 10., 12., 16.,
                  20., 24]
 
 electron:
-  particle_dependent_variables: []
-  features_abs: []
   particle_name: 'Electron'
   particle_mass: 1111.
   cuts:
     - PtBin: 0
-      Pt_range: [1.0,4.0]
+      Pt_range: [0.5,10.0]
       Eta_range: [-0.8,0.8]
       NClsTPC_min: 0
       NClsTPCDeDx_min: 0

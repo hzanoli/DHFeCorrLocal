@@ -136,26 +136,6 @@ def hist_with_errors(variable, bins_n='auto', ax=0, norm=False, return_values=Fa
     return ax, bin_edges
 
 
-# invariant mass needs a special treatment to plot
-def plot_inv_mass(df, base_name, part_name, pt):
-    """Old version (might not work out of the box) used to plot
-    invariant mass.In the current implementation of plot_cuts,
-    the invariant mass is treated properly,
-    and it is plotted separately for particle and antiparticles.
-    This function can help if you want to plot if for both at the same time."""
-    particle_cand = df['InvMass' + part_name][df['IsSelected' + part_name] == True]
-    antipart_cand = df['InvMass' + part_name + "bar"][df['IsSelected' + part_name + "bar"] == True]
-
-    mass_values = pd.concat([particle_cand, antipart_cand])
-    ax, y_values, y_error, bins_x = hist_with_errors(mass_values, 100, return_values=True)
-
-    # ax.set_xlabel(names_qa["InvMass"]["name"])
-    ax.set_ylabel("Counts")
-    # ax.get_figure().savefig(qa_dir+base_name+"_InvMass_pt"+str(pt)+".pdf", bbox_inches='tight')
-    return ax, y_values, y_error, bins_x
-    # plt.close()
-
-
 def plot_cuts_part_antipart(before, after, cuts, name_qa, suffix='', plot_hist=False):
     """Wraper function used to:
     -Build the dictionaries for particles and antiparticles

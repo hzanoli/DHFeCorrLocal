@@ -61,7 +61,7 @@ if __name__ == '__main__':
         job_name = 'root_2_pqt_' + str(job_id)
 
         script_path = definitions.ROOT_DIR + '/io/convert_to_parquet.py'
-        submit_part = r"qsub -V -cwd -N " + job_name + " -S $(which python) " + script_path
+        submit_part = r"qsub -V -cwd -N " + job_name + " -S $(which python3) " + script_path
         command = submit_part + ' ' + config + ' --name_root ' + name_root + ' ' + file_names
         print("Submitting job " + str(job_id))
         subprocess.run(command, shell=True)

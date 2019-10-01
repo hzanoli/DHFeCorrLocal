@@ -205,6 +205,12 @@ def save_pairs(data_sample, config_file, stage='raw'):
     data_sample.loc[:, data_sample.columns[data_sample.dtypes != 'category']].to_parquet(file_name)
 
 
+def get_run_list(configuration_name):
+    file_list = glob.glob(storage_location + configuration_name + "/*" + "event.parquet")
+    run_list = [get_friendly_parquet_file_name(file, 'event') for file in file_list]
+    return run_list
+
+
 def load(configuration_name, particle, run_number=None, columns=None, index=None, sample_factor=None, lazy=False):
     """Loads the dataset from the default storage location. If run_number is a list, all the runs in the list will be
     merged.
@@ -280,7 +286,7 @@ def load(configuration_name, particle, run_number=None, columns=None, index=None
                 df = pd.read_parquet(x, columns=columns)
                 data_sets.append(df)
             except OSError:
-                warnings.warn('It is not possible to load the files with run number = ' + str(run))
+                warnings.warn('It is not possible to load the files with run number = ' + str(x))
                 return None
 
     if len(data_sets) < 0:

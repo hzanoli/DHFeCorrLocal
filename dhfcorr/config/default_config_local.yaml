@@ -34,6 +34,7 @@ correlation_qa_style:
   n_sigma_significance: 2.
 
 model_building:
+  # features
   bins_pt: [2., 2.5, 3., 3.5, 4., 5., 6., 7., 8., 10., 12., 16., 24, 9999.]
   features: ['NormDecayLengthXY', 'CosP', 'CosPXY', 'ImpParXY', 'DCA', 'Normd0MeasMinusExp', 'PtDaughter0',
              'PtDaughter1', 'ReducedChi2', 'D0Prod', 'CosTs', 'D0Daughter0', 'D0Daughter1', 'DecayLength',
@@ -41,6 +42,16 @@ model_building:
              'NSigmaTPCDaughter1', 'NSigmaTOFDaughters1']
   additional_features: ['SelectionStatusDefaultPID', 'InvMass', 'Pt', 'Eta']
   additional_features_mc: ['IsD', 'IsParticleCandidate', 'IsParticle', 'IsPrompt']
+
+  # Model configuration
+  nfolds: 5
+  grid_search:
+    'ntrees': [800, 1600]
+    'max_depth': [3, 6]
+    'gamma': [0., 1.e-3]
+    'sample_rate': [0.5, 0.8]
+    'col_sample_rate': [0.5, 0.8]
+    'learn_rate': [0.05, 0.3]
 
 selection_ml:
   selection_ml_file: 'cut_bdt_sig.pkl'

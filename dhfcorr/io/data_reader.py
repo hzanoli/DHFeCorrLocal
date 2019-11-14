@@ -211,7 +211,22 @@ def get_run_list(configuration_name):
     return run_list
 
 
-def load(configuration_name, particle, run_number=None, columns=None, index=None, sample_factor=None, lazy=False):
+def get_file_list(configuration_name, particle, step='raw'):
+    if step == 'raw':
+        return glob.glob(storage_location + configuration_name + "/*" + particle + ".parquet")
+    elif step == 'filtered':
+        return glob.glob(definitions.PROCESSING_FOLDER + configuration_name + '/filtered/' + "/*" + particle +
+                         ".parquet")
+    elif step == 'filtered':
+        pass
+    return list()
+
+
+def load(configuration_name, particle,
+         step='raw',
+         run_number=None, columns=None,
+         index=None, sample_factor=None,
+         lazy=False):
     """Loads the dataset from the default storage location. If run_number is a list, all the runs in the list will be
     merged.
 
@@ -223,6 +238,8 @@ def load(configuration_name, particle, run_number=None, columns=None, index=None
 
     particle: str or list
         The particle name, such as ``electron` or ``dmeson``. The same name that was used to save it.
+
+    step
 
     run_number: str, list or None
         This is a unique identifier for each file. Usually the run number is used.
@@ -321,3 +338,5 @@ def reduce_dataframe_memory(df):
 
     for col in df.columns[df.dtypes == 'int64']:
         df[col] = df[col].astype(np.int32)
+
+    return df

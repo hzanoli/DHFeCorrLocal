@@ -22,7 +22,6 @@ run_list = run_list.split(',')
 
 yaml_config = args.yaml_config
 d_cuts = configyaml.ConfigYaml(yaml_config)
-cols_to_load = d_cuts.values['model_building']['features'] + d_cuts.values['model_building']['additional_features']
 
 processing_folder = definitions.PROCESSING_FOLDER + args.config_name
 folder_to_save = processing_folder + '/ml-dataset/'
@@ -42,13 +41,13 @@ def filter_bkg(df, mc_shape, n_sigma=4.0):
 
 candidates_df = list()
 for run in run_list:
-    bkg = reader.load(args.config_name, args.particle_name, run_number=[run])[cols_to_load]
+    bkg = reader.load(args.config_name, args.particle_name, run_number=[run])
     bkg['PtBin'] = pd.cut(bkg['Pt'], bins=d_cuts.values['model_building']['bins_pt'])
     candidates = bkg.groupby('PtBin', as_index=False).apply(filter_bkg, mc_shape=mc_mean)
     candidates_df.append(candidates)
 
 df_merged = pd.concat(candidates_df)
-print('Saving files to: ' + folder_to_save)
+# print('Saving files to: ' + folder_to_save)
 df_merged.groupby('PtBin', as_index=False).apply(lambda x: x.drop('PtBin', axis='columns').to_parquet(
     folder_to_save + 'bkg_' + str(args.id) + '_' + str(x.name) + '.parquet'))
 

@@ -9,3 +9,5 @@ DATA_FOLDER = '/data2/data/d_hfe/'
 PROCESSING_FOLDER = '/data2/data/d_hfe/processing/'
 
 # Cluster definitions
+JOB_QUEUE = 'gpu'
+CLUSTER_MEMORY = 15

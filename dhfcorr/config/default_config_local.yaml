@@ -21,7 +21,7 @@ correlation:
                       4.71238898]
 
 inv_mass:
-  range_fit: [1.7,2.1]
+  range_fit: [1.67,2.06]
   # defined in AliHFInvMassFitter.h
   sig_func: kGaus
   bkg_func: kPol2
@@ -30,28 +30,43 @@ correlation_qa_style:
   kwargs_plot:
     fmt: 'o'
     color: 'black'
-  x_range: [1.7,2.1]
+  x_range: [1.67,2.06]
   n_sigma_significance: 2.
+
+reduce_data:
+  bins_pt: [2., 2.5, 3., 3.5, 4., 5., 6., 7., 8., 10., 12., 16., 24, 9999.]
+  features: ['InvMass', 'Pt', 'Eta', 'Phi', 'IDDaughters0', 'IDDaughters1', 'bkg', 'prompt', 'nonprompt',  'GridPID',
+             'EventNumber', 'ID', 'IsParticleCandidate']
 
 model_building:
   # features
   bins_pt: [2., 2.5, 3., 3.5, 4., 5., 6., 7., 8., 10., 12., 16., 24, 9999.]
   features: ['NormDecayLengthXY', 'CosP', 'CosPXY', 'ImpParXY', 'DCA', 'Normd0MeasMinusExp', 'PtDaughter0',
-             'PtDaughter1', 'ReducedChi2', 'D0Prod', 'CosTs', 'D0Daughter0', 'D0Daughter1', 'DecayLength',
-             'DecayLengthXY', 'NormDecayLength', 'NSigmaTPCDaughter0', 'NSigmaTOFDaughters0',
-             'NSigmaTPCDaughter1', 'NSigmaTOFDaughters1']
-  additional_features: ['SelectionStatusDefaultPID', 'InvMass', 'Pt', 'Eta']
-  additional_features_mc: ['IsD', 'IsParticleCandidate', 'IsParticle', 'IsPrompt']
+             'PtDaughter1', 'ReducedChi2', 'D0Prod', 'CosTs', 'D0Daughter0', 'D0Daughter1',
+             'DecayLengthXY', 'NSigmaTPCDaughter0', 'NSigmaTOFDaughters0',
+             'NSigmaTPCDaughter1', 'NSigmaTOFDaughters1', 'DecayLength']
+  target: 'CandidateType'
 
-  # Model configuration
-  nfolds: 5
-  grid_search:
-    'ntrees': [800, 1600]
-    'max_depth': [3, 6]
-    'gamma': [0., 1.e-3]
-    'sample_rate': [0.5, 0.8]
-    'col_sample_rate': [0.5, 0.8]
-    'learn_rate': [0.05, 0.3]
+  model_parameters:
+    seed: 1313
+    tree_method: 'auto'
+    max_depth: 3
+    stopping_metric: 'logloss'
+    stopping_rounds: 2
+    stopping_tolerance: 0.001
+    score_tree_interval: 100
+    nfolds: 4
+    keep_cross_validation_predictions: False
+    ntrees: 2000
+    min_child_weight: 3
+    sample_rate: 0.8
+    col_sample_rate: 0.6
+    learn_rate: 0.1
+
+  # Cluster configuration
+  max_time_cluster: '12:10:00'
+  queue: 'gpu7'
+
 
 selection_ml:
   selection_ml_file: 'cut_bdt_sig.pkl'

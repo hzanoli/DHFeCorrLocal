@@ -4,6 +4,7 @@ import dhfcorr.config_yaml as configyaml
 import numpy as np
 import pandas as pd
 import dhfcorr.definitions as definitions
+from tqdm import tqdm
 import os
 import argparse
 import subprocess
@@ -28,9 +29,15 @@ if __name__ == '__main__':
     parser.add_argument("data_config", help="Name of the configuration used in data (used for background).")
     # parser.add_argument("--meson", choices=['D0', 'D+', 'Dstar'], default='D0', help='D meson that will be used.')
     parser.add_argument("--yaml_file", default=None, help='YAML file with the configurations of the analysis.')
-    parser.add_argument("--nfiles", help='Number of files per job.', default=70)
+    parser.add_argument("--nfiles", type=int, help='Number of files per job.', default=150)
+    parser.add_argument("--submit-bkg", dest='submit_bkg', action='store_true', help='Submit the background '
+                                                                                     'generation on SGE')
+    parser.add_argument("--not-submit-bkg", dest='submit_bkg', action='store_false', help='DO NOT Submit the background'
+                                                                                          ' generation on SGE')
+    parser.set_defaults(submit_bkg=True)
 
     args = parser.parse_args()
+    print(args)
 
     print("The following configuration will be used:")
     print('Configuration in MC (for signal): ' + args.mc_config)
@@ -38,15 +45,15 @@ if __name__ == '__main__':
 
     d_cuts = configyaml.ConfigYaml(args.yaml_file)
 
-    cols_to_load = d_cuts.values['model_building']['features'] + d_cuts.values['model_building']['additional_features']
-    cols_to_load_mc = cols_to_load + d_cuts.values['model_building']['additional_features_mc']
-    signal = sl.get_true_dmesons(reader.load(args.mc_config, 'dmeson'))[cols_to_load_mc]
+    print("Processing signal")
+    signal = sl.get_true_dmesons(reader.load(args.mc_config, 'dmeson'))
     signal['PtBin'] = pd.cut(signal['Pt'], d_cuts.values['model_building']['bins_pt'])
 
     # Create the columns which will be used for the ML training 'CandidateType'
     # CandidateType = -1 -> Background
     # CandidateType =  0 -> Non-Prompt D mesons
     # CandidateType =  1 -> Prompt D mesons
+
     signal['CandidateType'] = signal['IsPrompt'].astype(np.int)
 
     processing_folder = definitions.PROCESSING_FOLDER + args.data_config
@@ -67,16 +74,34 @@ if __name__ == '__main__':
 
     runs = reader.get_run_list(args.data_config)
 
+    print("Processing Background:")
     job_id = 0
-    for run_list in batch(runs, args.nfiles):
+    for run_list in tqdm(list(batch(runs, args.nfiles))):
         job_name = 'bkg4ml_' + str(job_id)
+        if args.submit_bkg:
+            submit_part = r"qsub -V -cwd -N " + job_name + " -S $(which python3) " + definitions.ROOT_DIR + \
+                          '/io/create_bkg_sample.py'
+            command = submit_part + ' ' + format_list_to_bash(run_list) + ' ' + args.data_config + ' --id ' + str(
+                job_id)
 
-        submit_part = r"qsub -V -cwd -N " + job_name + " -S $(which python3) " + definitions.ROOT_DIR + \
-                      '/io/create_bkg_sample.py'
-        command = submit_part + ' ' + format_list_to_bash(run_list) + ' ' + args.data_config + ' --id ' + str(job_id)
-        if args.yaml_file is not None:
-            command += ' --yaml_file ' + args.yaml_file
-        print()
-        print("Submitting job " + str(job_id))
-        subprocess.run(command, shell=True)
-        job_id = job_id + 1
+            print(command)
+            if args.yaml_file is not None:
+                command += ' --yaml_file ' + args.yaml_file
+            subprocess.run(command, shell=True)
+
+        else:
+            n_short = int(args.nfiles / 7)
+            processes = list()
+            sub_job_id = 0
+            for short_run in batch(run_list, n_short):
+                command = "python3 " + definitions.ROOT_DIR + '/io/create_bkg_sample.py '
+                command = command + format_list_to_bash(short_run) + ' ' + args.data_config + ' --id ' + str(
+                    job_id) + '_' + str(sub_job_id)
+                if args.yaml_file is not None:
+                    command += ' --yaml_file ' + args.yaml_file
+
+                processes.append(subprocess.Popen(command, shell=True))
+                sub_job_id += 1
+            exit_codes = [p.wait() for p in processes]
+
+        job_id += 1

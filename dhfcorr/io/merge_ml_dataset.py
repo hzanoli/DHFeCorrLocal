@@ -10,39 +10,40 @@ from tqdm import tqdm
 import subprocess
 
 
-def get_signal_df(folder, pt_bin_name, cols):
+def get_signal_df(folder, pt_bin_name):
     file = folder + 'sig_' + pt_bin_name + '.parquet'
-    df = pd.read_parquet(file)[cols].copy()
-    return df.reset_index(drop=True)
+    return pd.read_parquet(file).reset_index(drop=True)
 
 
-def get_background_df(folder, pt_bin_name, cols):
+def get_background_df(folder, pt_bin_name):
     files = glob.glob(folder + 'bkg_*' + pt_bin_name + '*.parquet')
     total_file_size = (np.array([os.path.getsize(file) for file in files])).sum() / (1024 ** 3)
     print('Found a total of: {} files with approx. {:0.1f} GB'.format(len(files), total_file_size))
 
-    if total_file_size > 25.:
-        sample_rate = 25. / total_file_size
+    random.seed(1313)
+    if total_file_size > 20.:
+        sample_rate = 20. / total_file_size
         files = random.sample(files, int(sample_rate * len(files)))
         total_file_size = (np.array([os.path.getsize(file) for file in files])).sum() / (1024 ** 3)
-        print('Too large files, so I will sample only GB'.format(total_file_size))
+        print('Too large files, so I will sample only {:0.1f} GB'.format(total_file_size))
 
     print("Reading background files: ")
-    bkg_dfs = [pd.read_parquet(file, use_threads=True)[cols] for file in tqdm(files)]
+    bkg_dfs = [pd.read_parquet(file, use_threads=True) for file in tqdm(files)]
     merged_background = pd.concat(bkg_dfs, ignore_index=True, sort=False).reset_index(drop=True)
 
     return merged_background.reset_index(drop=True)
 
 
-def build_dataframe_ml(folder, pt_bin_name, cols, cols_mc):
-    signal = get_signal_df(folder, pt_bin_name, cols_mc)
+def build_dataframe_ml(folder, pt_bin_name):
+    signal = get_signal_df(folder, pt_bin_name)
 
-    background = get_background_df(folder, pt_bin_name, cols)
+    background = get_background_df(folder, pt_bin_name)
     if len(background) > 2 * len(signal):
-        background = background.sample(2 * len(signal))
+        background = background.sample(2 * len(signal), random_state=1313)
     background['CandidateType'] = -1
 
     total_df = pd.concat([signal, background], ignore_index=True).reset_index(drop=True)
+    total_df.fillna(False, inplace=True)
     return total_df
 
 
@@ -62,16 +63,13 @@ if __name__ == '__main__':
 
     folder_saved = definitions.PROCESSING_FOLDER + args.config + '/ml-dataset/'
 
-    cols_to_load = d_cuts.values['model_building']['features'] + d_cuts.values['model_building']['additional_features']
-    cols_to_load_mc = cols_to_load + ['CandidateType']
-
     print()
     for pt_bin, i in zip(pt_bin_names, range(len(pt_bin_names))):
         print('Processing bin: ' + pt_bin)
-        merged = build_dataframe_ml(folder_saved, pt_bin, cols_to_load, cols_to_load_mc)
-        merged.to_parquet(folder_saved + 'ml_sample_' + i + '.parquet')
+        merged = build_dataframe_ml(folder_saved, pt_bin)
+        merged.to_parquet(folder_saved + 'ml_sample_' + str(i) + '.parquet')
         print()
 
     if args.remove_intermediate:
-        subprocess.run('rm ' + folder_saved + 'bkg*')
-        subprocess.run('rm ' + folder_saved + 'sig*')
+        subprocess.run('rm ' + folder_saved + 'bkg*', shell=True)
+        subprocess.run('rm ' + folder_saved + 'sig*', shell=True)

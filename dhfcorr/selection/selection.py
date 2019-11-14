@@ -4,7 +4,7 @@ import warnings
 import dhfcorr.config_yaml as configyaml
 import dhfcorr.definitions as definitions
 import dhfcorr.io.data_reader as reader
-import dhfcorr.correlation_utils as utils
+
 
 class Cuts(object):
 
@@ -119,6 +119,11 @@ def filter_in_pt_bins(df, cuts):
 
     # cut the dataframe in pt bins.
     pt_bins = pd.cut(df['Pt'], cuts.pt_bins)
+    cols_present = [x in df.columns for x in cuts.feature_names()]
+    if not all(cols_present):
+        raise ValueError('The following columns are specified in the cuts, but are not present in the DataFrame: \n'
+                         '' + str([x for x in cuts.feature_names() if x not in df.columns]))
+
     pass_cuts = df.groupby(by=pt_bins).apply(lambda x: apply_cuts_pt(x, cuts))
 
     return pass_cuts
@@ -129,6 +134,10 @@ def build_additional_features_dmeson(df):
     Any additional features can be added here.
     """
     df['D0Prod'] = (df['D0Daughter1'] * df['D0Daughter0']).astype(np.float32)
+    # Selected PID in the default PID selection
+    particles = df['IsParticleCandidate']
+    default_pid = df['SelectionStatusDefaultPID']
+    df['PID'] = (default_pid == 3) | (particles & (default_pid == 1)) | (~particles & (default_pid == 2))
 
 
 def get_true_dmesons(df):
@@ -173,38 +182,3 @@ def filter_df(df_x, cuts, suffix):
 
 def build_additional_features_electron(df):
     pass
-
-
-def selection_pairs(config_file=None, suffix='_t'):
-    config_file = configyaml.ConfigYaml(config_file)
-    base_folder = config_file.values['base_folder']
-
-    file_selection = base_folder + '/' + config_file.values['selection_ml']['selection_ml_file']
-    print("Reading configuration file for ML cuts:" + file_selection)
-    df_cuts = pd.read_pickle(file_selection)
-
-    print("Reading file with the raw pairs")
-    data_sample = reader.load_pairs(config_file, 'raw')
-
-    print("Applying Cuts in Pt")
-    data_sample['PtBinML'] = pd.cut(data_sample['Pt' + suffix], config_file.values['selection_ml']['bins_trig_ml'])
-    data_sample = data_sample.groupby('PtBinML').apply(lambda x: filter_df(x, df_cuts, suffix)).reset_index(
-        level=0, drop=True)
-
-    reader.save_pairs(data_sample, config_file, 'selected')
-
-
-if __name__ == '__main__':
-    """"Select the pairs.
-    The first argument is the name of the file that contain the pairs of D-e. If none is provided, the default name 
-    from definitions.py is used.
-    The second argument is the name of the configuration yaml file. If none is provided, the default one is used.
-    """
-    import sys
-
-    try:
-        config = sys.argv[1]
-    except IndexError:
-        config = None
-
-    selection_pairs(config)

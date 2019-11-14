@@ -4,10 +4,11 @@ import matplotlib.pyplot as plt
 import warnings
 
 from dhfcorr.correlation_utils import reduce_to_single_particle, compute_angular_differences
-from dhfcorr.fit_inv_mass import plot_inv_mass_fit, make_histo_and_fit_inv_mass, get_n_signal, get_n_bkg, \
-    get_significance, select_inv_mass, get_n_bkg_sidebands
+from dhfcorr.fit_inv_mass import select_inv_mass
+from dhfcorr.fit.fit1D import plot_inv_mass_fit, make_histo_and_fit_inv_mass, get_n_signal, get_n_bkg, get_significance, \
+    get_n_bkg_sidebands
 
-from histogram.histogram import Histogram
+from histogramming.histogram import Histogram
 import sklearn.utils as skutils
 import dhfcorr.io.data_reader as reader
 
@@ -63,7 +64,7 @@ def correlation_dmeson(df_pairs, fits, n_sigma_sig=2., n_sigma_bkg_min=4., n_sig
     d_in_this_pt = reduce_to_single_particle(df_pairs, suffixes[0])
     e_in_this_pt = reduce_to_single_particle(df_pairs, suffixes[1])
 
-    # print(df_pairs.name)
+    # print(df_pairs.name)dd
     # print(fits)
     # fit = fits.loc[df_pairs.name]
     # Fit Invariant Mass
@@ -185,23 +186,14 @@ def prepare_single_particle_df(df, suffix, bins):
     Returns the value of the columns before the names were changed and the new values.
     """
 
-    # Get rid of the index coming from the Pt bins used to filter the trigger and/or d associated
-    df['IdDF'] = range(len(df))
-
     # Add possibility to have weights in the correlations. If now available, create with 1.0
     if 'Weight' not in df.columns:
         df['Weight'] = 1.0
         df['Weight'] = df['Weight'].astype(np.float32)
 
-    cols_original = df.columns
-    df.columns = [str(x) + str(suffix) for x in df.columns]
-    cols_new = df.columns
-
     # Create the bins for each particle
     prefix = suffix[1:].upper()
     df[prefix + 'PtBin'] = pd.cut(df['Pt' + suffix], bins)
-
-    return list(cols_original), list(cols_new)
 
 
 def fill_missing_value(correlation, value_name, suffixes, bins_value, new_value=0.0):
@@ -286,7 +278,9 @@ def build_pairs(trigger, associated, suffixes=('_d', '_e'), identifier=('GridPID
         print("End Mixing")
 
     else:  # Same Event
+        # This needs len(trigger) x len(associated) to fit in memory
         correlation = trigger.join(associated, lsuffix=suffixes[0], rsuffix=suffixes[1], how='inner')
+
         if remove_same_id:
             correlation = correlation[correlation['ID' + suffixes[0]] != correlation['ID' + suffixes[1]]]
 
@@ -306,16 +300,10 @@ def build_pairs_from_lazy(df, suffixes, pt_bins_trig, pt_bins_assoc, filter_trig
     assoc_prefix = assoc_suffix[1:].upper()
 
     sum_pairs = list()
+
     for trig, assoc in df:
         trig_df = trig.load()
-
-        if 'InvMassD0' in trig_df.columns:
-            trig_df['InvMass'] = trig_df['InvMassD0']
-
         assoc_df = assoc.load()
-
-        if 'InvMassD0' in assoc_df.columns:
-            assoc_df['InvMass'] = assoc_df['InvMassD0']
 
         print(reader.get_friendly_parquet_file_name(trig.file_name)[:-6])
 

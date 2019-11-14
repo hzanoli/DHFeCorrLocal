@@ -2,6 +2,13 @@
 <project version="4">
   <component name="PublishConfigData" autoUpload="Always" serverName="quark_via_ssh">
     <serverData>
+      <paths name="Stoomboot">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/project/alice/users/hezanoli/DHFeCorrLocal" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
       <paths name="quark_via_ssh">
         <serverdata>
           <mappings>

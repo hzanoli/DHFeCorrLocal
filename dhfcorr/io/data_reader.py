@@ -53,21 +53,10 @@ import glob
 import dhfcorr.config_yaml as configyaml
 import dhfcorr.definitions as definitions
 import random
+import itertools
 
 storage_location = definitions.DATA_FOLDER
 base_folder_name = "DHFeCorrelation_"
-
-
-def set_storage_location(location):
-    """"Set the location that the parquet files will be saved.
-
-    Parameters
-    ----------
-    location: str
-        Location that the parquet files will be saved.
-    """
-    global storage_location
-    storage_location = location
 
 
 def set_base_folder_name(name):
@@ -135,6 +124,8 @@ def save(df, configuration_name, particle, run_number):
 
     """
     import os
+    if not os.path.isdir(storage_location):
+        os.mkdir(storage_location)
     if not os.path.isdir(storage_location + configuration_name):
         os.mkdir(storage_location + configuration_name)
 
@@ -148,11 +139,15 @@ class LazyFileLoader:
         self.file_name = file
         self.columns = columns
         self.index = index
+        self.dataframe = None
 
     def __copy__(self):
         return LazyFileLoader(self.file_name, self.index, self.columns)
 
     def load(self, columns=None, index=None):
+        if self.dataframe is not None:
+            return self.dataframe
+
         if columns is None:
             columns = self.columns
         if index is None:
@@ -164,8 +159,9 @@ class LazyFileLoader:
             df = pd.read_parquet(self.file_name, columns=columns)
 
         reduce_dataframe_memory(df)
+        self.dataframe = df
 
-        return df
+        return self.dataframe
 
 
 def get_file_name(config, stage):
@@ -205,10 +201,27 @@ def save_pairs(data_sample, config_file, stage='raw'):
     data_sample.loc[:, data_sample.columns[data_sample.dtypes != 'category']].to_parquet(file_name)
 
 
-def get_run_list(configuration_name):
-    file_list = glob.glob(storage_location + configuration_name + "/*" + "event.parquet")
-    run_list = [get_friendly_parquet_file_name(file, 'event') for file in file_list]
+def get_files_from_runlist(configuration_name, run_number, particle, stage='raw'):
+    files = [glob.glob(storage_location + configuration_name + "/*" + str(run) + '_' + str(particle) + '.parquet') for
+             run in run_number]
+    files = list(itertools.chain.from_iterable(files))
+    return files
+
+
+def get_run_list(configuration_name, particle='event', step='raw'):
+    location = get_location_step(configuration_name, step)
+    file_list = glob.glob(location + "/*" + particle + ".parquet")
+    run_list = list({get_friendly_parquet_file_name(file, particle) for file in file_list})
     return run_list
+
+
+def get_location_step(configuration, step='raw'):
+    if step == 'raw':
+        return storage_location + configuration + "/"
+    elif step == 'filtered':
+        return definitions.PROCESSING_FOLDER + configuration + '/filtered/'
+
+    return None
 
 
 def get_file_list(configuration_name, particle, step='raw'):
@@ -217,8 +230,6 @@ def get_file_list(configuration_name, particle, step='raw'):
     elif step == 'filtered':
         return glob.glob(definitions.PROCESSING_FOLDER + configuration_name + '/filtered/' + "/*" + particle +
                          ".parquet")
-    elif step == 'filtered':
-        pass
     return list()
 
 
@@ -275,15 +286,21 @@ def load(configuration_name, particle,
     if isinstance(run_number, (str, int, float)):
         run_number = [run_number]
 
-    if run_number is None:
-        # Find all the runs if no run is set
-        file_list = glob.glob(storage_location + configuration_name + "/*" + particle[0] + ".parquet")
-        run_list = [get_friendly_parquet_file_name(file, particle[0]) for file in file_list]
-        return load(configuration_name, particle, run_number=run_list, columns=columns, index=index,
-                    sample_factor=sample_factor, lazy=lazy)
+    if len(particle) == 1 and len(columns) != 1:
+        columns = [columns]
 
-    file_list = [[storage_location + configuration_name + r"/" + str(run) + '_' + x + '.parquet' for x in particle]
-                 for run in run_number]
+    if step == 'filtered':
+        location = definitions.PROCESSING_FOLDER + configuration_name + "/filtered"
+    else:
+        location = storage_location + configuration_name
+
+    if run_number is None:
+        file_list = glob.glob(location + "/*" + str(particle[0]) + ".parquet")
+        run_list = [get_friendly_parquet_file_name(x, particle[0]) for x in file_list]
+        run_list.sort()
+        return load(configuration_name, particle, step, run_list, columns, index, sample_factor, lazy)
+    else:
+        file_list = [[location + r"/" + str(run) + '_' + str(x) + '.parquet' for x in particle] for run in run_number]
 
     if sample_factor is not None:
         if sample_factor > 1.:
@@ -293,8 +310,13 @@ def load(configuration_name, particle,
         file_list = random.sample(file_list, number_to_sample)
 
     if lazy:
-        return [[LazyFileLoader(x, index=index, columns=col) for x, col in zip(list_run, columns)]
-                for list_run in file_list]
+        lazy_list = [[LazyFileLoader(x, index=index, columns=col) for x, col in zip(list_run, columns)]
+                     for list_run in file_list]
+        # Reduce dimensionality in case it is only one particle
+        if len(particle) == 1:
+            lazy_list = [x[0] for x in lazy_list]
+
+        return lazy_list
 
     data_sets = list()
     for f in file_list:
@@ -329,7 +351,7 @@ def get_friendly_root_file_name(file):
 
 
 def get_friendly_parquet_file_name(file, particle=''):
-    return file.split('/')[-1][:-9 - len(particle)]
+    return file.split('/')[-1].split('.')[0][:-(len(particle) + 1)]
 
 
 def reduce_dataframe_memory(df):
@@ -340,3 +362,49 @@ def reduce_dataframe_memory(df):
         df[col] = df[col].astype(np.int32)
 
     return df
+
+
+def get_period(location):
+    return location.split('/')[-1].split('_')[0]
+
+
+def get_run_number(location):
+    return int(location.split('/')[-1].split('_')[1])
+
+
+def split_files(file, size, max_file_size):
+    if int(len(file)) != int(len(size)):
+        raise ValueError('Arrays with file names and file sizes do not have the same length.\n'
+                         'Lengths: files ' + str(len(file)) + ' and size ' + str(len(size)))
+    if int(max_file_size) <= 0:
+        raise ValueError('Maximum size should be > 0')
+
+    files_info = pd.DataFrame({'file': file, 'size': size}).set_index('file')
+    files_left = files_info.copy()
+
+    large_files = files_left[files_left['size'] >= float(max_file_size)]
+    if len(large_files) > 0:  # Add all files that have size > max size
+        groups = [[x] for x in large_files.index.values]
+        files_left.drop(large_files.index, inplace=True)
+    else:  # Create a group only with the first file
+        groups = list()
+        groups.append([files_left.index[0]])
+        files_left.drop(files_left.index[0], inplace=True)
+
+    while len(files_left) > 0:
+        current_group = groups[-1]
+
+        # Check which files are still allowed in the current group
+        size_left = max_file_size - (files_info.loc[current_group]['size'].sum())
+        files_that_fit = files_left.loc[files_info['size'] <= size_left].index
+
+        if len(files_that_fit) > 0:  # Still possible to add more files
+            current_group.append(files_that_fit[0])
+            files_left.drop(files_that_fit[0], inplace=True)
+            continue
+        else:  # Current group is full, create a new group
+            new_group = [files_left.index[0]]
+            files_left.drop(new_group, inplace=True)
+            groups.append(new_group)
+
+    return groups

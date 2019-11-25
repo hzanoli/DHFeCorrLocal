@@ -37,10 +37,10 @@ if __name__ == '__main__':
     parser.add_argument("--particle", default='dmeson', help="Name of the particle")
     parser.add_argument("--pre_filter_bkg", default=0.5, help='Maximum probability of the background that will be '
                                                               'still accepted')
-    parser.add_argument("--maximum_pt_filter", default=3., help='Maximum pT that pre_filter_bkg will  be used')
+    parser.add_argument("--maximum_pt_filter", default=0., help='Maximum pT that pre_filter_bkg will  be used')
     parser.add_argument("--yaml_file", default=None, help='YAML file with the configurations of the analysis. If None, '
                                                           'uses the default configuration.')
-    parser.add_argument("--nfiles", help='Number of files per job.', default=30)
+    parser.add_argument("--nfiles", help='Number of files per job.', default=20)
 
     args = parser.parse_args()
 

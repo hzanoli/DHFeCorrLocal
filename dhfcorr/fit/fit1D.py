@@ -1,4 +1,5 @@
 import numpy as np
+import ROOT
 import root_numpy as rnp
 from matplotlib import pyplot as plt
 

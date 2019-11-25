@@ -19,6 +19,7 @@ def train_model(config, pt_bin, yaml_file, prefix):
     features = d_cuts.values['model_building']['features']
     target = d_cuts.values['model_building']['target']
     parameters = d_cuts.values['model_building']['model_parameters']
+    train[target] = train[target] > -1
 
     train[target] = train[target].asfactor()
 

@@ -4,7 +4,7 @@ selected_pair_file: 'selected.parquet'
 
 correlation:
   bins_assoc: [0.5, 4.0]
-  bins_trig: [2., 3., 4., 5., 6., 7., 8., 10., 12., 16., 24. ]
+  bins_trig: [3., 4., 5., 6., 7., 8., 10., 12., 16., 24. ]
   bins_cent: [-10.,100.1]
   bins_zvtx: [-10.01,10.01]
   bins_eta: [-1.0, -0.8, -0.6, -0.4, -0.2, 0., 0.2, 0.4, 0.6, 0.8, 1.0]
@@ -34,17 +34,18 @@ correlation_qa_style:
   n_sigma_significance: 2.
 
 reduce_data:
-  bins_pt: [2., 2.5, 3., 3.5, 4., 5., 6., 7., 8., 10., 12., 16., 24, 9999.]
-  features: ['InvMass', 'Pt', 'Eta', 'Phi', 'IDDaughters0', 'IDDaughters1', 'bkg', 'prompt', 'nonprompt',  'GridPID',
+  bins_pt: [3., 3.5, 4., 5., 6., 7., 8., 10., 12., 16., 24, 9999.]
+  features: ['InvMass', 'Pt', 'Eta', 'Phi', 'IDDaughters0', 'IDDaughters1', 'bkg', 'RunNumber',
              'EventNumber', 'ID', 'IsParticleCandidate']
 
 model_building:
   # features
-  bins_pt: [2., 2.5, 3., 3.5, 4., 5., 6., 7., 8., 10., 12., 16., 24, 9999.]
+  bins_pt: [3., 3.5, 4., 5., 6., 7., 8., 10., 12., 16., 24, 9999.]
   features: ['NormDecayLengthXY', 'CosP', 'CosPXY', 'ImpParXY', 'DCA', 'Normd0MeasMinusExp', 'PtDaughter0',
              'PtDaughter1', 'ReducedChi2', 'D0Prod', 'CosTs', 'D0Daughter0', 'D0Daughter1',
-             'DecayLengthXY', 'NSigmaTPCDaughter0', 'NSigmaTOFDaughters0',
-             'NSigmaTPCDaughter1', 'NSigmaTOFDaughters1', 'DecayLength']
+             'DecayLengthXY', 'NSigmaTPCDaughters00', 'NSigmaTPCDaughters01', 'NSigmaTPCDaughters10',
+             'NSigmaTPCDaughters11', 'NSigmaTOFDaughters00', 'NSigmaTOFDaughters01',
+             'NSigmaTOFDaughters10', 'NSigmaTOFDaughters11', 'DecayLength', 'PID']
   target: 'CandidateType'
 
   model_parameters:
@@ -52,12 +53,12 @@ model_building:
     tree_method: 'auto'
     max_depth: 3
     stopping_metric: 'logloss'
-    stopping_rounds: 2
+    stopping_rounds: 5
     stopping_tolerance: 0.001
-    score_tree_interval: 100
-    nfolds: 4
+    score_tree_interval: 50
+    nfolds: 5
     keep_cross_validation_predictions: False
-    ntrees: 2000
+    ntrees: 3000
     min_child_weight: 3
     sample_rate: 0.8
     col_sample_rate: 0.6
@@ -70,7 +71,7 @@ model_building:
 
 selection_ml:
   selection_ml_file: 'cut_bdt_sig.pkl'
-  bins_trig_ml: [2., 2.25, 2.5, 2.75, 3., 3.5, 4., 5., 6., 7., 8., 10., 12., 16.,
+  bins_trig_ml: [3., 3.5, 4., 5., 6., 7., 8., 10., 12., 16.,
                  20., 24]
 
 electron:

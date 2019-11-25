@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 parser = argparse.ArgumentParser()
 parser.add_argument("config", help='YAML file with the configurations of the analysis.')
 parser.add_argument("--yaml_file", default=None, help='YAML file with the configurations of the analysis.')
-parser.add_argument("--max_examples", default=200000, help='Maximum number of examples for signal')
+parser.add_argument("--max_examples", default=400000, help='Maximum number of examples for signal')
 
 args = parser.parse_args()
 

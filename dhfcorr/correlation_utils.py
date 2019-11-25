@@ -17,7 +17,7 @@ def convert_to_range(dphi):
 
 
 def reduce_to_single_particle(correlation, suffix):
-    particle = correlation.groupby(by=[correlation.index, correlation['IdDF' + suffix]],
+    particle = correlation.groupby(by=[correlation.index, correlation['Id' + suffix]],
                                    sort=False, as_index=False).nth(0)
     cols_to_keep = [x for x in correlation.columns if x.endswith('Bin')]
     cols_to_keep += [x for x in correlation.columns if x.endswith(suffix)]

@@ -56,7 +56,7 @@ def normalize_mixed_event(histogram):
     return histogram / counts_at_0
 
 
-def correlation_dmeson(df_pairs, fits, n_sigma_sig=2., n_sigma_bkg_min=4., n_sigma_bkg_max=8.,
+def correlation_dmeson(df_pairs, n_sigma_sig=2., n_sigma_bkg_min=4., n_sigma_bkg_max=8.,
                        suffixes=('_d', '_e'),
                        axis=('CentralityBin', 'VtxZBin', 'DPtBin', 'EPtBin', 'DeltaEtaBin', 'DeltaPhiBin'),
                        plot=False, identifier=('GridPID', 'EventNumber'), mix=True, subtract_non_hfe=False,
@@ -193,7 +193,7 @@ def prepare_single_particle_df(df, suffix, bins):
 
     # Create the bins for each particle
     prefix = suffix[1:].upper()
-    df[prefix + 'PtBin'] = pd.cut(df['Pt' + suffix], bins)
+    df['PtBin'] = pd.cut(df['Pt'], bins)
 
 
 def fill_missing_value(correlation, value_name, suffixes, bins_value, new_value=0.0):
@@ -296,8 +296,6 @@ def build_pairs(trigger, associated, suffixes=('_d', '_e'), identifier=('GridPID
 def build_pairs_from_lazy(df, suffixes, pt_bins_trig, pt_bins_assoc, filter_trig=None, filter_assoc=None, **kwargs):
     trig_suffix = suffixes[0]
     assoc_suffix = suffixes[1]
-    trig_prefix = trig_suffix[1:].upper()
-    assoc_prefix = assoc_suffix[1:].upper()
 
     sum_pairs = list()
 
@@ -310,12 +308,10 @@ def build_pairs_from_lazy(df, suffixes, pt_bins_trig, pt_bins_assoc, filter_trig
         prepare_single_particle_df(trig_df, trig_suffix, pt_bins_trig)
         prepare_single_particle_df(assoc_df, assoc_suffix, pt_bins_assoc)
 
-        trig_df = trig_df.loc[(trig_df['Pt' + trig_suffix] < 24.) & (trig_df['Pt' + trig_suffix] > 2.)]
-
         if filter_trig is not None:
-            trig_df = trig_df.groupby(trig_prefix + 'PtBin').apply(filter_trig).reset_index(level=0, drop=True)
+            trig_df = trig_df.groupby('PtBin', as_index=False).apply(filter_trig)
         if filter_assoc is not None:
-            assoc_df = assoc_df.groupby(assoc_prefix + 'PtBin').apply(filter_assoc).reset_index(level=0, drop=True)
+            assoc_df = assoc_df.groupby('PtBin', as_index=False).apply(filter_assoc)
 
         pairs = build_pairs(trig_df, assoc_df, (trig_suffix, assoc_suffix), **kwargs)
         sum_pairs.append(pairs)

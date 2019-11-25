@@ -5,6 +5,7 @@ import os
 import dhfcorr.definitions as definitions
 import subprocess
 import dhfcorr.io.data_reader as reader
+from dhfcorr.submit_job import get_job_command
 
 
 def check_for_folder(folder):
@@ -15,7 +16,7 @@ def check_for_folder(folder):
 
 
 if __name__ == '__main__':
-    print("Predicts the classes in data. All the work is submitted with SGE.")
+    print("Predicts the classes in data. All the work is submitted to the cluster.")
 
     parser = argparse.ArgumentParser()
     parser.add_argument("config", help="Name of the configuration")
@@ -24,10 +25,10 @@ if __name__ == '__main__':
                                                                "None is provided, the name will be the same")
     parser.add_argument("--yaml_file", default=None, help='YAML file with the configurations of the analysis.')
     parser.add_argument("--prefix", default=None, help='Prefix when saving the model files')
-    parser.add_argument("--nfiles", help='Number of files per job.', default=70)
-    parser.add_argument("-s", "--search_for_processed", help='Search for processed files before submitting jobs.'
-                                                             'Processed files that are found will not be predicted '
-                                                             'Useful if some jobs failed.', default=False)
+    parser.add_argument("--nfiles", type=int, help='Number of files per job.', default=5)
+    parser.add_argument('-c', '--continue_previous', dest='search_for_processed', action='store_true')
+    parser.add_argument('-d', '--delete_previous', dest='search_for_processed', action='store_false')
+    parser.set_defaults(search_for_processed=False)
 
     args = parser.parse_args()
     from dhfcorr.io.utils import batch, format_list_to_bash
@@ -36,34 +37,35 @@ if __name__ == '__main__':
 
     check_for_folder(processing_folder + args.config)
     check_for_folder(processing_folder + args.config + '/filtered/')
-    check_for_folder(processing_folder + args.config_to_save)
-    check_for_folder(processing_folder + args.config_to_save + '/filtered/')
+    if args.config_to_save is not None:
+        check_for_folder(processing_folder + args.config_to_save)
+        check_for_folder(processing_folder + args.config_to_save + '/filtered/')
 
-    files = reader.get_file_list(args.config, args.particle)
-    print(len(files))
-    print(args.search_for_processed)
+    runs = reader.get_run_list(args.config)
+
+    print('Total number of runs: ' + str(len(runs)))
+    print('Searching for preprocessed files?: ' + str(args.search_for_processed))
+
     if args.search_for_processed:
         config = args.config
-        if args.config_to_save is not None:
-            config = args.config_to_save
-        files_processed = reader.get_file_list(config, args.particle, step='filtered')
-        files = [f for f in files if f not in files_processed]
+        runs_processed = set(reader.get_run_list(config, args.particle, step='filtered'))
+        runs = list(set(runs) - runs_processed)
 
     job_id = 0
-    for file_list in batch(files, args.nfiles):
+    for run_list in batch(runs, args.nfiles):
         job_name = 'ml_pred_' + str(job_id)
 
-        submit_part = "qsub -V -cwd -N " + job_name + " -S $(which python3) " + definitions.ROOT_DIR + \
-                      '/ml/predict.py'
-        command = submit_part + ' ' + format_list_to_bash(file_list) + ' ' + args.config
+        script = definitions.ROOT_DIR + '/ml/predict.py'
+        arguments = format_list_to_bash(run_list) + ' ' + args.config
 
         if args.yaml_file is not None:
-            command += ' --yaml_file ' + args.yaml_file
+            arguments += ' --yaml_file ' + args.yaml_file
         if args.prefix is not None:
-            command += ' --prefix ' + args.prefix
+            arguments += ' --prefix ' + args.prefix
         if args.config_to_save is not None:
-            command += ' --config_to_save ' + args.config_to_save
+            arguments += ' --config_to_save ' + args.config_to_save
 
+        command = get_job_command(job_name, script, arguments)
         print()
         print("Submitting job " + str(job_id))
         print(command)

@@ -7,6 +7,7 @@ import argparse
 import pandas as pd
 import dhfcorr.config_yaml as configyaml
 import dhfcorr.definitions as definitions
+import dhfcorr.io.data_reader as reader
 
 
 def predict_class(files, config, yaml_file, prefix, config_save):
@@ -44,13 +45,14 @@ def predict_class(files, config, yaml_file, prefix, config_save):
         file_name = file.split('/')[-1]
 
         combined.to_parquet(definitions.PROCESSING_FOLDER + config_save + '/filtered/' + file_name)
+
         h2o.remove(dataset)
         print()
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("files", help="File list")
+    parser.add_argument("runs", help="run list")
     parser.add_argument("config", help="Configuration name")
     parser.add_argument("--config_to_save", default=None, help="Configuration name")
     parser.add_argument("--particle", default='dmeson', help="Particle name that will be reduced")
@@ -60,7 +62,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     h2o.init(max_mem_size_GB=definitions.CLUSTER_MEMORY)
-    file_list = args.files.split(',')
+    print("Predicting for runs: ")
+    run_list = args.runs.split(',')
+    print(run_list)
+    file_list = reader.get_files_from_runlist(args.config, run_list, args.particle)
 
     print('Processing the files: ')
     for f in file_list:
@@ -68,4 +73,4 @@ if __name__ == '__main__':
 
     predict_class(file_list, args.config, args.yaml_file, args.prefix, args.config_to_save)
     print('Processing done.')
-    # h2o.cluster().shutdown()
+    h2o.cluster().shutdown()

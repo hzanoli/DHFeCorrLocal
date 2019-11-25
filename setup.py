@@ -8,6 +8,6 @@ setup(
     license='',
     author='hzanoli',
     author_email='',
-    description='', install_requires=['pandas', 'numpy', 'seaborn', 'matplotlib', 'PyYAML', 'PyYAML', 'pyarrow',
+    description='', install_requires=['pandas', 'numpy', 'seaborn', 'matplotlib', 'PyYAML', 'pyarrow',
                                       'root_pandas', 'tqdm', 'h2o', 'histogramming', 'scikit-learn']
 )

@@ -41,14 +41,14 @@ if __name__ == '__main__':
         check_for_folder(processing_folder + args.config_to_save)
         check_for_folder(processing_folder + args.config_to_save + '/filtered/')
 
-    runs = reader.get_run_list(args.config)
+    runs = reader.get_period_and_run_list(args.config)
 
     print('Total number of runs: ' + str(len(runs)))
     print('Searching for preprocessed files?: ' + str(args.search_for_processed))
 
     if args.search_for_processed:
         config = args.config
-        runs_processed = set(reader.get_run_list(config, args.particle, step='filtered'))
+        runs_processed = set(reader.get_period_and_run_list(config, args.particle, step='filtered'))
         runs = list(set(runs) - runs_processed)
 
     job_id = 0

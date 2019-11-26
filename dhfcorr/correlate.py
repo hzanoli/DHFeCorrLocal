@@ -10,6 +10,8 @@ from dhfcorr.fit.fit1D import plot_inv_mass_fit, make_histo_and_fit_inv_mass, ge
 
 from histogramming.histogram import Histogram
 import sklearn.utils as skutils
+from tqdm import tqdm
+import dask
 import dhfcorr.io.data_reader as reader
 
 try:
@@ -178,7 +180,7 @@ def correlation_dmeson(df_pairs, n_sigma_sig=2., n_sigma_bkg_min=4., n_sigma_bkg
     return result
 
 
-def prepare_single_particle_df(df, suffix, bins):
+def prepare_single_particle_df(df, bins):
     """"Preprocessor before calculating the pairs. Takes place 'inplace' (changes df).
     Changes the names of the columns by appending the suffix.
     Adds values for weights in case they are not available.
@@ -192,7 +194,6 @@ def prepare_single_particle_df(df, suffix, bins):
         df['Weight'] = df['Weight'].astype(np.float32)
 
     # Create the bins for each particle
-    prefix = suffix[1:].upper()
     df['PtBin'] = pd.cut(df['Pt'], bins)
 
 
@@ -284,40 +285,66 @@ def build_pairs(trigger, associated, suffixes=('_d', '_e'), identifier=('GridPID
         if remove_same_id:
             correlation = correlation[correlation['ID' + suffixes[0]] != correlation['ID' + suffixes[1]]]
 
-    # fill_missing_value(correlation, 'Centrality', suffixes, kwargs['bins_cent'], 1.0)
-    # fill_missing_value(correlation, 'VtxZ', suffixes, kwargs['bins_zvtx'], 1.0)
+    return correlation
 
-    # Calculate the angular differences
+
+def process_lazy_worker(results, df_list, suffixes, pt_bins_trig, pt_bins_assoc, filter_trig, filter_assoc, **kwargs):
+    pairs_list = list()
+
+    for df in df_list:
+        trig_suffix = suffixes[0]
+        assoc_suffix = suffixes[1]
+
+        trig_df = df[0].load()
+        assoc_df = df[1].load()
+
+        prepare_single_particle_df(trig_df, pt_bins_trig)
+        prepare_single_particle_df(assoc_df, pt_bins_assoc)
+
+        if filter_trig is not None:
+            trig_df = trig_df.groupby(['PtBin'], group_keys=False).apply(filter_trig)
+        if filter_assoc is not None:
+            assoc_df = assoc_df.groupby(['PtBin'], group_keys=False).apply(filter_assoc)
+
+        if trig_df.empty or assoc_df.empty:
+            return None
+
+        pairs = build_pairs(trig_df, assoc_df, (trig_suffix, assoc_suffix), **kwargs)
+        pairs_list.append(pairs)
+
+    results.put(pd.concat(pairs_list))
+
+
+def build_pairs_from_lazy(df_list, suffixes, pt_bins_trig, pt_bins_assoc, filter_trig=None, filter_assoc=None,
+                          nthreads=16, **kwargs):
+    from multiprocessing import Process, Queue
+    from dhfcorr.io.utils import batch
+    results = Queue()
+
+    procs = list()
+
+    for df in batch(df_list, int(len(df_list) / nthreads)):
+        p = Process(target=process_lazy_worker,
+                    args=(results, df, suffixes, pt_bins_trig, pt_bins_assoc, filter_trig, filter_assoc))
+        procs.append(p)
+        p.start()
+
+    sum_pairs = [results.get() for x in range(len(df_list))]
+
+    for p in procs:
+        p.join()
+
+    correlation = pd.concat(sum_pairs)
     compute_angular_differences(correlation, suffixes=suffixes, **kwargs)
 
     return correlation
 
+    # arams_to_pool = [(x, suffixes, pt_bins_trig, pt_bins_assoc, filter_trig, filter_assoc) for x in df]
 
-def build_pairs_from_lazy(df, suffixes, pt_bins_trig, pt_bins_assoc, filter_trig=None, filter_assoc=None, **kwargs):
-    trig_suffix = suffixes[0]
-    assoc_suffix = suffixes[1]
+    # results = pool.map(process_lazy, params_to_pool)
+    # pool.close()
+    # pool.join()
 
-    sum_pairs = list()
+    # sum_pairs = pd.concat(results)
 
-    for trig, assoc in df:
-        trig_df = trig.load()
-        assoc_df = assoc.load()
-
-        print(reader.get_friendly_parquet_file_name(trig.file_name)[:-6])
-
-        prepare_single_particle_df(trig_df, trig_suffix, pt_bins_trig)
-        prepare_single_particle_df(assoc_df, assoc_suffix, pt_bins_assoc)
-
-        if filter_trig is not None:
-            trig_df = trig_df.groupby('PtBin', as_index=False).apply(filter_trig)
-        if filter_assoc is not None:
-            assoc_df = assoc_df.groupby('PtBin', as_index=False).apply(filter_assoc)
-
-        pairs = build_pairs(trig_df, assoc_df, (trig_suffix, assoc_suffix), **kwargs)
-        sum_pairs.append(pairs)
-
-    return pd.concat(sum_pairs)
-
-
-if __name__ == '__main__':
-    pass
+    # return pd.concat(sum_pairs)

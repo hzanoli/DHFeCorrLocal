@@ -164,7 +164,7 @@ def fit_inv_mass_root(histogram, range_fit, sig_func, bkg_func, fix_mean=None, f
     return fit_mass
 
 
-def make_histo_and_fit_inv_mass(df, n_bins='auto', min_hist=1.7, max_hist=2.1, suffix='', **kwargs):
+def make_histo_and_fit_inv_mass(df, n_bins='auto', min_hist=1.67, max_hist=2.06, suffix='', **kwargs):
     inv_mass = df['InvMass' + suffix]
     if 'Weight' not in df.columns:
         weight = np.ones(len(inv_mass))

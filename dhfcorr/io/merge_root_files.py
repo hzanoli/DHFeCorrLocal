@@ -56,3 +56,5 @@ if __name__ == '__main__':
         for group, i in tqdm(zip(file_groups, range(len(file_groups))), total=len(file_groups)):
             destination = folder_to_save + str(period) + '_' + str(run_number) + '_' + str(i) + '.root'
             merge_root_files(group, destination)
+
+    print("Processing done.")

@@ -6,6 +6,7 @@ from dhfcorr.submit_job import get_job_command
 import dhfcorr.definitions as definitions
 import pandas as pd
 import itertools
+import glob
 from tqdm import tqdm
 
 """Tools to download from GRID to local cluster. 
@@ -73,13 +74,22 @@ def download_train_opt(train_name, run_number, local_folder,
                        login, n_batches=100,
                        file_name='AnalysisResults.root'):
     files = find_files_from_train(run_number, train_name, file_name=file_name)
+    files_downloaded = glob.glob(local_folder + '/*.root')
 
     print("Train name: " + train_name)
     print("Train run number: " + run_number)
 
-    print('Number of files in this path:' + str(len(files)))
-
+    print('Number of files in this path: ' + str(len(files)))
     friendly_names = [get_friendly_file_name(x, train_name) for x in files]
+    friendly_names_downloaded = [x.split('/')[-1].split('.root')[0] for x in files_downloaded]
+    print('Number of files in already downloaded path: ' + str(len(friendly_names_downloaded)))
+    files = [files[x] for x in range(len(files))
+             if friendly_names[x] not in friendly_names_downloaded]
+    friendly_names = [friendly_names[x] for x in range(len(files))
+                      if friendly_names[x] not in friendly_names_downloaded]
+    print(len(files))
+    print(len(friendly_names))
+    print('So I will download:' + str(len(files)))
     size_jobs = len(files) / n_batches
     print("Number of jobs that will be submitted (approx.): " + str(size_jobs))
 
@@ -153,12 +163,15 @@ def find_files_from_train(train_run, train_name, pwg='PWGHF', file_name='Analysi
 
     files_to_download = list()
     print("Building file list to be downloaded:")
+
     for folder in tqdm(output_dirs):
         files_path = '*/' + train_name + '/' + str(train_run) + '*/' + file_name
         files = find_files_on_grid(folder, files_path)
         files_to_download.append(files)
 
-    return list(itertools.chain.from_iterable(files_to_download))
+    files_on_grid = list(itertools.chain.from_iterable(files_to_download))
+
+    return files_on_grid
 
 
 if __name__ == '__main__':
@@ -191,13 +204,6 @@ if __name__ == '__main__':
 
     local_folder_path = definitions.DATA_FOLDER + '/root/' + str(args.destination)
     pd.DataFrame([{'user': args.user, 'code': args.code}]).to_csv('~/login.csv')
-
-    if not args.continue_down:
-        print("Cleaning old files. It might take a while. ")
-        clean_files = subprocess.Popen('rm -rf ' + local_folder_path + '/*', shell=True)
-        clean_files.wait()
-    else:
-        "Not deleting previous downloaded files"
 
     if not os.path.isdir(definitions.DATA_FOLDER + '/root/'):
         os.mkdir(definitions.DATA_FOLDER + '/root/')

@@ -85,7 +85,7 @@ if __name__ == '__main__':
 
     from dhfcorr.io.utils import batch, format_list_to_bash
 
-    runs = reader.get_run_list(args.data_config)
+    runs = reader.get_period_and_run_list(args.data_config)
 
     print("Processing Background:")
     clear = subprocess.Popen('rm -f ' + ' bkg_*', shell=True)

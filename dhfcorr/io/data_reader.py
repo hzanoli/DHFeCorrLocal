@@ -54,8 +54,9 @@ import dhfcorr.config_yaml as configyaml
 import dhfcorr.definitions as definitions
 import random
 import itertools
+from tqdm import tqdm
 
-storage_location = definitions.DATA_FOLDER
+storage_location = definitions.PROCESSING_FOLDER
 base_folder_name = "DHFeCorrelation_"
 
 
@@ -103,7 +104,7 @@ def read_root_file(file_name, configuration_name, particles=('electron', 'dmeson
     return data_frames
 
 
-def save(df, configuration_name, particle, run_number):
+def save(df, configuration_name, particle, run_number, step='raw'):
     """Saves the dataset into a parquet file in the default storage location. The directory is created in case it does
     not exist.
 
@@ -119,17 +120,22 @@ def save(df, configuration_name, particle, run_number):
     particle: str
         The particle name, such as ``electron` or ``dmeson``. The same name will have to be used to load it.
 
-    run_number: str, float or int
-        This is a unique identifier for each file. Usually the run number is used. It should be
+    run_number: str or possible to convert to str
+        This is a unique identifier for each file. Usually the run number or period is used.
+
+    step: str
+        name of the step of the process. The files will be saved to 'processing folder + step'
 
     """
     import os
-    if not os.path.isdir(storage_location):
-        os.mkdir(storage_location)
-    if not os.path.isdir(storage_location + configuration_name):
-        os.mkdir(storage_location + configuration_name)
 
-    name_to_save = storage_location + configuration_name + r"/" + str(run_number) + '_' + particle + '.parquet'
+    place_to_save = storage_location + step + '/'
+    if not os.path.isdir(place_to_save):
+        os.mkdir(place_to_save)
+    if not os.path.isdir(place_to_save + configuration_name):
+        os.mkdir(place_to_save + configuration_name)
+
+    name_to_save = place_to_save + configuration_name + "/" + str(run_number) + '_' + particle + '.parquet'
     df.to_parquet(name_to_save, index=False)
 
 
@@ -139,14 +145,11 @@ class LazyFileLoader:
         self.file_name = file
         self.columns = columns
         self.index = index
-        self.dataframe = None
 
     def __copy__(self):
         return LazyFileLoader(self.file_name, self.index, self.columns)
 
     def load(self, columns=None, index=None):
-        if self.dataframe is not None:
-            return self.dataframe
 
         if columns is None:
             columns = self.columns
@@ -159,9 +162,8 @@ class LazyFileLoader:
             df = pd.read_parquet(self.file_name, columns=columns)
 
         reduce_dataframe_memory(df)
-        self.dataframe = df
 
-        return self.dataframe
+        return df
 
 
 def get_file_name(config, stage):
@@ -208,7 +210,7 @@ def get_files_from_runlist(configuration_name, run_number, particle, stage='raw'
     return files
 
 
-def get_run_list(configuration_name, particle='event', step='raw'):
+def get_period_and_run_list(configuration_name, particle='event', step='raw'):
     location = get_location_step(configuration_name, step)
     file_list = glob.glob(location + "/*" + particle + ".parquet")
     run_list = list({get_friendly_parquet_file_name(file, particle) for file in file_list})
@@ -216,21 +218,26 @@ def get_run_list(configuration_name, particle='event', step='raw'):
 
 
 def get_location_step(configuration, step='raw'):
-    if step == 'raw':
-        return storage_location + configuration + "/"
-    elif step == 'filtered':
-        return definitions.PROCESSING_FOLDER + configuration + '/filtered/'
+    return definitions.PROCESSING_FOLDER + configuration + '/' + step + '/'
 
-    return None
+
+def get_periods(configuration, step='raw'):
+    location = get_location_step(configuration, step)
+    file_list = glob.glob(location + "/*.parquet")
+    periods_from_files = list({get_period(x) for x in file_list})
+    return periods_from_files
+
+
+def get_run_numbers(configuration, step='raw'):
+    location = get_location_step(configuration, step)
+    file_list = glob.glob(location + "/*.parquet")
+    runs_from_files = list({get_run_number(x) for x in file_list})
+    return runs_from_files
 
 
 def get_file_list(configuration_name, particle, step='raw'):
-    if step == 'raw':
-        return glob.glob(storage_location + configuration_name + "/*" + particle + ".parquet")
-    elif step == 'filtered':
-        return glob.glob(definitions.PROCESSING_FOLDER + configuration_name + '/filtered/' + "/*" + particle +
-                         ".parquet")
-    return list()
+    return glob.glob(definitions.PROCESSING_FOLDER + configuration_name + '/' + step + '/' + "/*" + particle +
+                     ".parquet")
 
 
 def load(configuration_name, particle,
@@ -286,13 +293,11 @@ def load(configuration_name, particle,
     if isinstance(run_number, (str, int, float)):
         run_number = [run_number]
 
-    if len(particle) == 1 and len(columns) != 1:
-        columns = [columns]
+    if columns is not None:
+        if len(particle) == 1 and len(columns) != 1:
+            columns = [columns]
 
-    if step == 'filtered':
-        location = definitions.PROCESSING_FOLDER + configuration_name + "/filtered"
-    else:
-        location = storage_location + configuration_name
+    location = definitions.PROCESSING_FOLDER + configuration_name + "/" + step
 
     if run_number is None:
         file_list = glob.glob(location + "/*" + str(particle[0]) + ".parquet")
@@ -319,7 +324,7 @@ def load(configuration_name, particle,
         return lazy_list
 
     data_sets = list()
-    for f in file_list:
+    for f in tqdm(file_list):
         for x in f:
             try:
                 df = pd.read_parquet(x, columns=columns)

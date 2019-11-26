@@ -70,7 +70,7 @@ if __name__ == '__main__':
         arguments = str(dataset) + ' --target_sizeGB ' + str(max_size) + ' -r '
         for p in period:
             arguments = arguments + str(p) + ' '
-        command = get_job_command(job_name, definitions.ROOT_DIR + '/io/merge_root_files.py', arguments)
+        command = get_job_command(job_name, definitions.ROOT_DIR + '/io/merge_files.py', arguments)
         # print(command)
         print("Submitting job " + str(job_name))
         subprocess.run(command, shell=True, stdout=subprocess.PIPE)

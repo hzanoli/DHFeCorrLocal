@@ -61,15 +61,11 @@ def normalize_mixed_event(histogram):
 def correlation_dmeson(df_pairs, n_sigma_sig=2., n_sigma_bkg_min=4., n_sigma_bkg_max=8.,
                        suffixes=('_d', '_e'),
                        axis=('CentralityBin', 'VtxZBin', 'DPtBin', 'EPtBin', 'DeltaEtaBin', 'DeltaPhiBin'),
-                       plot=False, identifier=('GridPID', 'EventNumber'), mix=True, subtract_non_hfe=False,
+                       plot=False, identifier=('RunNumber', 'EventNumber'), mix=True, subtract_non_hfe=False,
                        **kwargs):
     d_in_this_pt = reduce_to_single_particle(df_pairs, suffixes[0])
     e_in_this_pt = reduce_to_single_particle(df_pairs, suffixes[1])
 
-    # print(df_pairs.name)dd
-    # print(fits)
-    # fit = fits.loc[df_pairs.name]
-    # Fit Invariant Mass
     try:
         fit = make_histo_and_fit_inv_mass(d_in_this_pt, suffix=suffixes[0], **kwargs['inv_mass'])
     except RuntimeError:
@@ -180,7 +176,7 @@ def correlation_dmeson(df_pairs, n_sigma_sig=2., n_sigma_bkg_min=4., n_sigma_bkg
     return result
 
 
-def prepare_single_particle_df(df, bins):
+def prepare_single_particle_df(df, bins, suffix=''):
     """"Preprocessor before calculating the pairs. Takes place 'inplace' (changes df).
     Changes the names of the columns by appending the suffix.
     Adds values for weights in case they are not available.
@@ -195,6 +191,9 @@ def prepare_single_particle_df(df, bins):
 
     # Create the bins for each particle
     df['PtBin'] = pd.cut(df['Pt'], bins)
+    df['IdDF'] = df['PtBin'].reset_index().index
+
+    df.columns = [x + suffix for x in df.columns]
 
 
 def fill_missing_value(correlation, value_name, suffixes, bins_value, new_value=0.0):
@@ -298,13 +297,13 @@ def process_lazy_worker(results, df_list, suffixes, pt_bins_trig, pt_bins_assoc,
         trig_df = df[0].load()
         assoc_df = df[1].load()
 
-        prepare_single_particle_df(trig_df, pt_bins_trig)
-        prepare_single_particle_df(assoc_df, pt_bins_assoc)
+        prepare_single_particle_df(trig_df, pt_bins_trig, trig_suffix)
+        prepare_single_particle_df(assoc_df, pt_bins_assoc, assoc_suffix)
 
         if filter_trig is not None:
-            trig_df = trig_df.groupby(['PtBin'], group_keys=False).apply(filter_trig)
+            trig_df = trig_df.groupby(['PtBin' + trig_suffix], group_keys=False).apply(filter_trig)
         if filter_assoc is not None:
-            assoc_df = assoc_df.groupby(['PtBin'], group_keys=False).apply(filter_assoc)
+            assoc_df = assoc_df.groupby(['PtBin' + assoc_suffix], group_keys=False).apply(filter_assoc)
 
         if trig_df.empty or assoc_df.empty:
             return None

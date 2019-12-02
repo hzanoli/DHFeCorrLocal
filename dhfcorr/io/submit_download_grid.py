@@ -8,6 +8,7 @@ import pandas as pd
 import itertools
 import glob
 from tqdm import tqdm
+from dhfcorr.io.download_file import download_file
 
 """Tools to download from GRID to local cluster. 
 The cluster must have a working copy of alien (alien_cp and alien_token-init are used).
@@ -25,14 +26,6 @@ destination_folder
 Check submit_download_grid.py --help to a description of each parameter.
 
 """
-
-
-def get_train_output_file_name(folder_path, file_name):
-    command = 'alien_find ' + folder_path + ' ' + file_name
-    files = subprocess.run(command.split(), stdout=subprocess.PIPE).stdout.decode('utf-8')
-    files = files.split('\n')[:-3]
-    files = [x.strip() for x in files]
-    return files
 
 
 def submit_download_job(name, login, csv_file):
@@ -83,12 +76,11 @@ def download_train_opt(train_name, run_number, local_folder,
     friendly_names = [get_friendly_file_name(x, train_name) for x in files]
     friendly_names_downloaded = [x.split('/')[-1].split('.root')[0] for x in files_downloaded]
     print('Number of files in already downloaded path: ' + str(len(friendly_names_downloaded)))
-    files = [files[x] for x in range(len(files))
-             if friendly_names[x] not in friendly_names_downloaded]
-    friendly_names = [friendly_names[x] for x in range(len(files))
-                      if friendly_names[x] not in friendly_names_downloaded]
-    print(len(files))
-    print(len(friendly_names))
+    files_to_download = [(files[x], friendly_names[x])
+                         for x in range(len(files)) if friendly_names[x] not in friendly_names_downloaded]
+    files = [x[0] for x in files_to_download]
+    friendly_names = [x[1] for x in files_to_download]
+
     print('So I will download:' + str(len(files)))
     size_jobs = len(files) / n_batches
     print("Number of jobs that will be submitted (approx.): " + str(size_jobs))
@@ -122,12 +114,6 @@ def find_files_on_grid(folder, file_pattern):
     return res
 
 
-def download_from_grid(location, destination):
-    download = subprocess.Popen('alien_cp  alien://' + location + ' ' + destination, stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE, shell=True)
-    download.wait()
-
-
 def find_output_dirs(env_file):
     output_dirs = list()
     with open(env_file) as f:
@@ -150,9 +136,10 @@ def find_files_from_train(train_run, train_name, pwg='PWGHF', file_name='Analysi
         message += "\n The train_run is " + str(train_run) + " and train name is " + str(train_name)
         message += " and PWG is " + str(pwg)
         raise FileNotFoundError(message)
+
     print("Retriving LEGO train configuration from:")
     print(env_file[0])
-    download_from_grid(env_file[0], 'temp_env.sh')
+    download_file(env_file[0], 'temp_env.sh')
     output_dirs = find_output_dirs('temp_env.sh')
 
     print("The following datasets were found: ")
@@ -174,6 +161,29 @@ def find_files_from_train(train_run, train_name, pwg='PWGHF', file_name='Analysi
     return files_on_grid
 
 
+def submit_download_grid(user, code, train_name, destination,
+                         train_runs, n_files):
+    local_folder_path = definitions.DATA_FOLDER + '/root/' + str(destination)
+    pd.DataFrame([{'user': user, 'code': code}]).to_csv('~/login.csv')
+
+    if not os.path.isdir(definitions.DATA_FOLDER + '/root/'):
+        os.mkdir(definitions.DATA_FOLDER + '/root/')
+
+    if not os.path.isdir(local_folder_path):
+        os.mkdir(local_folder_path)
+
+    print('The files will be save to: ' + local_folder_path)
+
+    print("The train run numbers are:")
+    print(train_runs)
+
+    for run, i in zip(args.train_runs, range(len(args.train_runs))):
+        print('-> -> -> -> -> ->- > -> -> -> -> -> -> -> ->- > -> ->')
+        print("         Downloading train run: " + str(run))
+        print('-> -> -> -> -> ->- > -> -> -> -> -> -> -> ->- > -> ->')
+        download_train_opt(train_name, run, local_folder_path, '~/login.csv', n_batches=n_files)
+
+
 if __name__ == '__main__':
     print("Downloading the output from the LEGO trains \n\n")
     # image from https://www.asciiart.eu/vehicles/trains
@@ -193,31 +203,12 @@ if __name__ == '__main__':
                                             "the basic definitions from the definitions.py file")
     parser.add_argument("-r", "--train_runs", help='Number of the run in the Lego train system', nargs='+',
                         required=True)
-
-    parser.add_argument('-c', '--continue_previous', dest='continue_down', action='store_true')
-    parser.add_argument('-d', '--delete_previous', dest='continue_down', action='store_false')
-    parser.set_defaults(continue_down=True)
-
-    parser.add_argument("-n", "--n_files", help='Number of files in each job ', default=50)
+    parser.add_argument("-n", "--n_files", type=int, help='Number of files in each job ', default=50)
 
     args = parser.parse_args()
 
-    local_folder_path = definitions.DATA_FOLDER + '/root/' + str(args.destination)
-    pd.DataFrame([{'user': args.user, 'code': args.code}]).to_csv('~/login.csv')
+    token = subprocess.Popen('echo ' + args.code + ' | alien-token-init ' + args.user, shell=True,
+                             stdout=subprocess.PIPE)
+    token.wait()
 
-    if not os.path.isdir(definitions.DATA_FOLDER + '/root/'):
-        os.mkdir(definitions.DATA_FOLDER + '/root/')
-
-    if not os.path.isdir(local_folder_path):
-        os.mkdir(local_folder_path)
-
-    print('The files will be save to: ' + local_folder_path)
-
-    print("The train run numbers are:")
-    print(args.train_runs)
-
-    for run, i in zip(args.train_runs, range(len(args.train_runs))):
-        print('-> -> -> -> -> ->- > -> -> -> -> -> -> -> ->- > -> ->')
-        print("         Downloading train run: " + str(run))
-        print('-> -> -> -> -> ->- > -> -> -> -> -> -> -> ->- > -> ->')
-        download_train_opt(args.train_name, run, local_folder_path, '~/login.csv')
+    submit_download_grid(args.user, args.code, args.train_name, args.destination, args.train_runs, args.n_files)

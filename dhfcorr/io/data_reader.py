@@ -129,18 +129,18 @@ def save(df, configuration_name, particle, run_number, step='raw'):
     """
     import os
 
-    place_to_save = storage_location + step + '/'
-    if not os.path.isdir(place_to_save):
-        os.mkdir(place_to_save)
-    if not os.path.isdir(place_to_save + configuration_name):
-        os.mkdir(place_to_save + configuration_name)
+    location = definitions.PROCESSING_FOLDER + configuration_name + "/" + step
 
-    name_to_save = place_to_save + configuration_name + "/" + str(run_number) + '_' + particle + '.parquet'
+    if not os.path.isdir(definitions.PROCESSING_FOLDER + configuration_name):
+        os.mkdir(definitions.PROCESSING_FOLDER + configuration_name)
+    if not os.path.isdir(location):
+        os.mkdir(location)
+
+    name_to_save = location + "/" + str(run_number) + '_' + particle + '.parquet'
     df.to_parquet(name_to_save, index=False)
 
 
 class LazyFileLoader:
-
     def __init__(self, file='', index=None, columns=None):
         self.file_name = file
         self.columns = columns
@@ -203,18 +203,18 @@ def save_pairs(data_sample, config_file, stage='raw'):
     data_sample.loc[:, data_sample.columns[data_sample.dtypes != 'category']].to_parquet(file_name)
 
 
-def get_files_from_runlist(configuration_name, run_number, particle, stage='raw'):
-    files = [glob.glob(storage_location + configuration_name + "/*" + str(run) + '_' + str(particle) + '.parquet') for
-             run in run_number]
+def get_files_from_runlist(configuration_name, run_numbers, particle, step='raw'):
+    location = get_location_step(configuration_name, step)
+    print(location)
+    print(particle)
+    files = [glob.glob(location + "*" + str(run) + '*_*' + str(particle) + '*.parquet') for run in run_numbers]
     files = list(itertools.chain.from_iterable(files))
     return files
 
 
-def get_period_and_run_list(configuration_name, particle='event', step='raw'):
-    location = get_location_step(configuration_name, step)
-    file_list = glob.glob(location + "/*" + particle + ".parquet")
-    run_list = list({get_friendly_parquet_file_name(file, particle) for file in file_list})
-    return run_list
+def search_for_processed(current_runs, config, step):
+    runs_processed = set(get_run_numbers(config, step=step))
+    return list(set(current_runs) - runs_processed)
 
 
 def get_location_step(configuration, step='raw'):
@@ -325,9 +325,9 @@ def load(configuration_name, particle,
 
     data_sets = list()
     for f in tqdm(file_list):
-        for x in f:
+        for file_particle, col in zip(f, columns):
             try:
-                df = pd.read_parquet(x, columns=columns)
+                df = pd.read_parquet(file_particle, columns=col)
                 data_sets.append(df)
             except OSError:
                 warnings.warn('It is not possible to load the files with run number = ' + str(x))
@@ -342,11 +342,6 @@ def load(configuration_name, particle,
         result_dataset.set_index(index, inplace=True)
 
     reduce_dataframe_memory(result_dataset)
-
-    # Temporary solution
-    if 'InvMassD0' in result_dataset.columns:
-        result_dataset['InvMass'] = result_dataset['InvMassD0']
-        result_dataset.drop('InvMassD0', axis='columns', inplace=True)
 
     return result_dataset
 

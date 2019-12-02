@@ -53,7 +53,7 @@ def convert_root_to_parquet(configuration_name, configuration_name_save, root_fi
     print("----------- Starting the conversion -----------")
     print()
     for root_file in root_files:
-        identifier = str(reader.get_period(root_file)) + '_' + str(reader.get_run_number(root_file))
+        identifier = root_file.split('/')[-1].split('.root')[0]
         preprocess(root_file, identifier, configuration_name, configuration_name_save)
 
 

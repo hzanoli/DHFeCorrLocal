@@ -25,10 +25,10 @@ if __name__ == '__main__':
                                                                "None is provided, the name will be the same")
     parser.add_argument("--yaml_file", default=None, help='YAML file with the configurations of the analysis.')
     parser.add_argument("--prefix", default=None, help='Prefix when saving the model files')
-    parser.add_argument("--nfiles", type=int, help='Number of files per job.', default=5)
+    parser.add_argument('-n', "--nfiles", type=int, help='Number of runs per job.', default=1)
     parser.add_argument('-c', '--continue_previous', dest='search_for_processed', action='store_true')
     parser.add_argument('-d', '--delete_previous', dest='search_for_processed', action='store_false')
-    parser.set_defaults(search_for_processed=False)
+    parser.set_defaults(search_for_processed=True)
 
     args = parser.parse_args()
     from dhfcorr.io.utils import batch, format_list_to_bash
@@ -37,19 +37,21 @@ if __name__ == '__main__':
 
     check_for_folder(processing_folder + args.config)
     check_for_folder(processing_folder + args.config + '/filtered/')
+
     if args.config_to_save is not None:
         check_for_folder(processing_folder + args.config_to_save)
         check_for_folder(processing_folder + args.config_to_save + '/filtered/')
 
-    runs = reader.get_period_and_run_list(args.config)
+    runs = reader.get_run_numbers(args.config)
 
     print('Total number of runs: ' + str(len(runs)))
     print('Searching for preprocessed files?: ' + str(args.search_for_processed))
 
     if args.search_for_processed:
-        config = args.config
-        runs_processed = set(reader.get_period_and_run_list(config, args.particle, step='filtered'))
-        runs = list(set(runs) - runs_processed)
+        runs = reader.search_for_processed(runs, args.config, 'filtered')
+
+    print('The following runs will be processed: ')
+    print(runs)
 
     job_id = 0
     for run_list in batch(runs, args.nfiles):
@@ -68,6 +70,5 @@ if __name__ == '__main__':
         command = get_job_command(job_name, script, arguments)
         print()
         print("Submitting job " + str(job_id))
-        print(command)
         subprocess.run(command, shell=True)
         job_id = job_id + 1

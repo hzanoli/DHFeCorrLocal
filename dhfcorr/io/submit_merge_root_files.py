@@ -16,10 +16,10 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument("dataset_name", help="Name of the local dataset.")
-    parser.add_argument("--target_sizeGB", default=1, help='Maximum file size for merged files.')
+    parser.add_argument('-t', "--target_sizeGB", default=0.1, help='Maximum file size for merged files.')
     parser.add_argument('-c', '--continue_previous_merge', dest='continue_merge', action='store_true')
     parser.add_argument('-d', '--delete_previous_merge', dest='continue_merge', action='store_false')
-    parser.add_argument('-n', '--number_of_runs', default=100, help='Number of runs per job')
+    parser.add_argument('-n', '--number_of_runs', type=int, default=100, help='Number of runs per job')
     parser.set_defaults(continue_merge=True)
 
     args = parser.parse_args()
@@ -58,6 +58,8 @@ if __name__ == '__main__':
         period_already_merged = {get_run_number(x) for x in files_already_merged}
         if len(period_already_merged) == 0:
             print("No previous merged files.")
+        else:
+            print(period_already_merged)
         periods = periods - period_already_merged
 
     periods = list(periods)
@@ -70,7 +72,7 @@ if __name__ == '__main__':
         arguments = str(dataset) + ' --target_sizeGB ' + str(max_size) + ' -r '
         for p in period:
             arguments = arguments + str(p) + ' '
-        command = get_job_command(job_name, definitions.ROOT_DIR + '/io/merge_files.py', arguments)
+        command = get_job_command(job_name, definitions.ROOT_DIR + '/io/merge_root_files.py', arguments)
         # print(command)
         print("Submitting job " + str(job_name))
         subprocess.run(command, shell=True, stdout=subprocess.PIPE)

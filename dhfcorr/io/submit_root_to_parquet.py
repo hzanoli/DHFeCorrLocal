@@ -25,7 +25,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("dataset_name", help='Name of the local dataset')
     parser.add_argument("configuration_name", help='Name of the configuration in the ROOT file.')
-    parser.add_argument('-n', "--n_runs", help='Number of runs per job.', default=20)
+    parser.add_argument('-n', "--n_runs", type=int, help='Number of runs per job.', default=20)
+    parser.add_argument('-c', '--continue_previous', dest='search_for_processed', action='store_true')
+    parser.add_argument('-d', '--delete_previous', dest='search_for_processed', action='store_false')
+    parser.set_defaults(search_for_processed=True)
 
     args = parser.parse_args()
 
@@ -41,15 +44,16 @@ if __name__ == '__main__':
     folder_root_files = definitions.DATA_FOLDER + '/root_merged/' + dataset_name
     print('Folder with root files: ' + folder_root_files)
     files = glob.glob(folder_root_files + "/*.root")
-    periods = list({get_run_number(x) for x in files})
+    runs = list({get_run_number(x) for x in files})
 
-    print('The total number of files found is : ' + str(len(files)))
-    print()
+    print('Total number of runs of this dataset = ' + str(len(runs)))
+
+    if args.search_for_processed:
+        runs = reader.search_for_processed(runs, dataset_name, 'raw')
+        print('Total number of runs excluding the ones already processed = ' + str(len(runs)))
 
     print('Processing the following periods (or runs):')
-    print(periods)
-
-    print('Saving them to:' + reader.storage_location)
+    print(runs)
 
     import subprocess
     from dhfcorr.io.utils import batch
@@ -57,7 +61,7 @@ if __name__ == '__main__':
     job_id = 0
     print()
     print("Submitting jobs:")
-    for period in tqdm(batch(periods, args.n_runs), total=int(len(periods) / args.n_runs) + 1):
+    for period in tqdm(batch(runs, args.n_runs), total=int(len(runs) / args.n_runs) + 1):
         job_name = 'conv_' + dataset_name + '_' + str(job_id)
 
         script_path = definitions.ROOT_DIR + '/io/convert_to_parquet.py'

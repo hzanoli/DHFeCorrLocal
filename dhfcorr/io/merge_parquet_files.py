@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 
 import argparse
-import numpy as np
-import pandas as pd
 import glob
 import os
+
+import numpy as np
+import pandas as pd
+
 import dhfcorr.definitions as definitions
 
 

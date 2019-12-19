@@ -1,13 +1,15 @@
-import dhfcorr.io.data_reader as reader
-import dhfcorr.selection.selection as sl
-import dhfcorr.config_yaml as configyaml
+import argparse
+import os
+import subprocess
+
 import numpy as np
 import pandas as pd
-import dhfcorr.definitions as definitions
 from tqdm import tqdm
-import os
-import argparse
-import subprocess
+
+import dhfcorr.config_yaml as configyaml
+import dhfcorr.definitions as definitions
+import dhfcorr.io.data_reader as reader
+import dhfcorr.selection.selection as sl
 from dhfcorr.submit_job import get_job_command
 
 
@@ -83,7 +85,7 @@ if __name__ == '__main__':
 
         mc_mean_sigma.to_pickle(folder_to_save + 'mc_mean_sigma.pkl')
 
-    from dhfcorr.io.utils import batch, format_list_to_bash
+    from dhfcorr.utils import batch, format_list_to_bash
 
     runs = reader.get_run_numbers(args.data_config)
 

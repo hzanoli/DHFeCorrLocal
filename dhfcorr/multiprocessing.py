@@ -1,7 +1,10 @@
-from multiprocessing import Process, Queue
-from dhfcorr.io.utils import batch
 import itertools
+from multiprocessing import Process, Queue
+
 import math
+from tqdm import tqdm
+
+from dhfcorr.utils import batch
 
 
 def process_multiple_data_in_one_run(results, data, function, **kwargs):
@@ -9,7 +12,7 @@ def process_multiple_data_in_one_run(results, data, function, **kwargs):
     results.put(process_results)
 
 
-def process(worker, list_of_data, n_treads, **kwargs):
+def process_multicore(worker, list_of_data, n_treads, message=None, **kwargs):
     data_blocks = list(batch(list_of_data, math.ceil(len(list_of_data) / n_treads)))
     queue = Queue()
     processes = list()
@@ -20,9 +23,9 @@ def process(worker, list_of_data, n_treads, **kwargs):
         processes.append(p)
         p.start()
 
-    combined_results = list(itertools.chain.from_iterable([queue.get() for x in range(len(data_blocks))]))
-
+    combined_results = list(itertools.chain.from_iterable([queue.get() for _ in tqdm(range(len(data_blocks)),
+                                                                                     total=len(data_blocks),
+                                                                                     desc=message)]))
     for p in processes:
         p.join()
-
     return combined_results

@@ -1,14 +1,16 @@
 #!/usr/bin/env python
 
-import subprocess
-import os
-from dhfcorr.submit_job import get_job_command
-import dhfcorr.definitions as definitions
-import pandas as pd
-import itertools
 import glob
+import itertools
+import os
+import subprocess
+
+import pandas as pd
 from tqdm import tqdm
+
+import dhfcorr.definitions as definitions
 from dhfcorr.io.download_file import download_file
+from dhfcorr.submit_job import get_job_command
 
 """Tools to download from GRID to local cluster. 
 The cluster must have a working copy of alien (alien_cp and alien_token-init are used).
@@ -66,8 +68,10 @@ def get_run_number_from_path(path):
 def download_train_opt(train_name, run_number, local_folder,
                        login, n_batches=100,
                        file_name='AnalysisResults.root'):
+
     files = find_files_from_train(run_number, train_name, file_name=file_name)
     files_downloaded = glob.glob(local_folder + '/*.root')
+    local_folder_name = local_folder.split('/')[-1]
 
     print("Train name: " + train_name)
     print("Train run number: " + run_number)
@@ -85,12 +89,12 @@ def download_train_opt(train_name, run_number, local_folder,
     size_jobs = len(files) / n_batches
     print("Number of jobs that will be submitted (approx.): " + str(size_jobs))
 
-    from dhfcorr.io.utils import batch
+    from dhfcorr.utils import batch
 
     current_job = 0
     for grid_file, local_file in zip(batch(files, n_batches), batch(friendly_names, n_batches)):
         local_file = [local_folder + '/' + x + '.root' for x in local_file]
-        name_job = 'down_' + str(run_number) + str('_') + str(current_job)
+        name_job = local_folder_name + '_d_' + str(run_number) + str('_') + str(current_job)
 
         print("Saving grid files and destinations on csv file: ", name_job + '.csv')
 
@@ -100,6 +104,8 @@ def download_train_opt(train_name, run_number, local_folder,
 
         submit_download_job(name_job, login, os.path.join(os.getcwd(), name_job + '.csv'))
         current_job = current_job + 1
+
+    return len(files)
 
 
 def get_files_from_alien_opt(run_result):
@@ -177,11 +183,16 @@ def submit_download_grid(user, code, train_name, destination,
     print("The train run numbers are:")
     print(train_runs)
 
+    total_files = list()
+
     for run, i in zip(args.train_runs, range(len(args.train_runs))):
         print('-> -> -> -> -> ->- > -> -> -> -> -> -> -> ->- > -> ->')
         print("         Downloading train run: " + str(run))
         print('-> -> -> -> -> ->- > -> -> -> -> -> -> -> ->- > -> ->')
-        download_train_opt(train_name, run, local_folder_path, '~/login.csv', n_batches=n_files)
+        n = download_train_opt(train_name, run, local_folder_path, '~/login.csv', n_batches=n_files)
+        total_files.append(n)
+
+    return sum(total_files)
 
 
 if __name__ == '__main__':

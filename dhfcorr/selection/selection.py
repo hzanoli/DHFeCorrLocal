@@ -1,9 +1,9 @@
+import warnings
+
 import numpy as np
 import pandas as pd
-import warnings
+
 import dhfcorr.config_yaml as configyaml
-import dhfcorr.definitions as definitions
-import dhfcorr.io.data_reader as reader
 
 
 class Cuts(object):
@@ -174,10 +174,22 @@ def get_reflected_dmesons(df):
     return df[~(particles | antiparticles)]
 
 
-def filter_df(df_x, cuts, suffix):
+def filter_df_prob(df_x, cuts, suffix=''):
     pt_bin = df_x.name
-    cut = float(cuts.loc[pt_bin])
-    return df_x[df_x['prediction' + suffix] >= cut]
+    cut = float(cuts[pt_bin])
+    return df_x[df_x['Probability' + suffix] >= cut]
+
+
+def build_cut_dict(pt_bins, cuts):
+    pt_bins_mid = (np.array(pt_bins) + np.array(pt_bins)) / 2
+    pt_bins_pd_format = list(pd.cut(pt_bins_mid, pt_bins).categories)
+    if len(pt_bins_pd_format) != len(cuts):
+        raise ValueError(
+            'The length of pt_bins ({:d}) is different of the one in cuts {:d}'.format(len(pt_bins_pd_format),
+                                                                                       len(cuts)))
+
+    dict_info = dict(zip(pt_bins_pd_format, cuts))
+    return dict_info
 
 
 def build_additional_features_electron(df):

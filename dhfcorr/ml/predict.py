@@ -1,15 +1,23 @@
 #!/usr/bin/env python
 
+import argparse
+import itertools
+
 import h2o
 import numpy as np
-import argparse
 import pandas as pd
+
 import dhfcorr.config_yaml as configyaml
 import dhfcorr.definitions as definitions
 import dhfcorr.io.data_reader as reader
 
 
-def predict_class(files, config, yaml_file, prefix, config_save):
+def add_prediction(df, models):
+    df = pd.DataFrame({'Prediction': h2o.mojo_predict_pandas(df, models[int(df.name)])['1'].values}, index=df.index)
+    return df
+
+
+def predict_class(files, config, yaml_file, prefix, config_save, test_mode):
     if config_save is None:
         config_save = config
 
@@ -24,30 +32,19 @@ def predict_class(files, config, yaml_file, prefix, config_save):
         print('Processing file: ')
         print(file)
         dataset = pd.read_parquet(file)
+
+        if test_mode:
+            dataset = dataset.iloc[:1000]
+
+        dataset['Probability'] = -999.
         pt_bins_df = pd.cut(dataset['Pt'], list(pt_bins), labels=False)
 
-        combined = dataset.groupby(pt_bins_df, as_index=False).transform(
-            lambda x: h2o.mojo_predict_pandas(x, models[x.name])['0'])
-
-        # bins_names = dataset['PtBin'].cat.categories()
-        # map_bins = dict(zip(bins_names, models))
-
-        # filtered = list()
-
-        # for pt_bin in bins_names:
-        #    model = map_bins[pt_bin]
-        #    this_bin_data = dataset[dataset['PtBin'] == pt_bin]
-        #    predictions = model.predict(this_bin_data)
-        #    this_bin_data['bkg'] = predictions['p0']
-        #    filtered.append(this_bin_data.as_data_frame().drop('PtBin', axis='columns'))
+        predictions = dataset.groupby(pt_bins_df, as_index=False, group_keys=False).apply(add_prediction, models)
+        dataset['Probability'] = predictions.astype('float32')
 
         file_name = file.split('/')[-1]
-
-        combined.to_parquet(definitions.PROCESSING_FOLDER + config_save + '/filtered/' + file_name)
-
-        h2o.remove(dataset)
+        dataset.to_parquet(definitions.PROCESSING_FOLDER + config_save + '/filtered/' + file_name)
         print()
-
 
 
 if __name__ == '__main__':
@@ -59,20 +56,27 @@ if __name__ == '__main__':
     parser.add_argument("--prefix", default='', help='Prefix when saving the model files')
     parser.add_argument("--yaml_file", default=None, help='YAML file with the configurations of the analysis. If None, '
                                                           'uses the default configuration.')
-    args = parser.parse_args()
+    parser.add_argument('-t', "--test_mode", action='store_true', dest='test',
+                        help='Test the script. Process only one file')
+    parser.set_defaults(test=False)
 
-    #h2o.init(max_mem_size_GB=definitions.CLUSTER_MEMORY)
+    args = parser.parse_args()
     print("Predicting for runs: ")
     run_list = args.runs.split(',')
     print(run_list)
 
-    file_list = reader.get_files_from_runlist(args.config, run_list, args.particle)
+    file_list = list(itertools.chain.from_iterable(
+        [reader.find_missing_processed_files(args.config, 'raw', 'filtered', args.particle, run, full_file_path=True)
+         for run in run_list]))
 
+    file_list.sort()
+    if args.test:
+        file_list = file_list[:1]
     print('Processing the files: ')
     for f in file_list:
         print(f)
 
-    predict_class(file_list, args.config, args.yaml_file, args.prefix, args.config_to_save)
+    predict_class(file_list, args.config, args.yaml_file, args.prefix, args.config_to_save, args.test)
     print('Processing done.')
 
-    #h2o.cluster().shutdown()
+    # h2o.cluster().shutdown()

@@ -1,10 +1,10 @@
 import ROOT
 import numpy as np
 import pandas as pd
-import seaborn as sns
 
 import dhfcorr.config_yaml as configyaml
-import dhfcorr.correlate as corr
+import dhfcorr.correlate.correlate as corr
+import dhfcorr.correlate.make_pairs
 import dhfcorr.io.data_reader as reader
 
 variables_to_keep_trig = ['GridPID', 'EventNumber', 'ID', 'IsParticleCandidate', 'Pt', 'Eta', 'Phi', 'InvMass',
@@ -24,8 +24,8 @@ assoc_suffix = '_a'
 
 inv_mass_trig_list = list()
 
-pairs = corr.build_pairs_from_lazy(df, (trig_suffix, assoc_suffix), pt_bins_trig, pt_bins_assoc,
-                                   **config_corr.values['correlation'])
+pairs = dhfcorr.correlate.make_pairs.build_pairs_from_lazy(df, (trig_suffix, assoc_suffix), pt_bins_trig, pt_bins_assoc,
+                                                           **config_corr.values['correlation'])
 
 selected = pd.read_pickle('pairs_d_hfe_hm.pkl').reset_index(level=0, drop=True)
 

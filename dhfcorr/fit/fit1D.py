@@ -1,10 +1,10 @@
-import numpy as np
 import ROOT
+import numpy as np
 import root_numpy as rnp
 from matplotlib import pyplot as plt
 
 from dhfcorr import config_yaml as configyaml
-from dhfcorr.correlation_utils import reduce_to_single_particle
+from dhfcorr.correlate.correlation_utils import reduce_to_single_particle
 from dhfcorr.io import data_reader as reader
 
 

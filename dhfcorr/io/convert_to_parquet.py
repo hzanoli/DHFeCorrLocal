@@ -1,12 +1,13 @@
 #!/usr/bin/env python
+import glob
 import itertools
+import warnings
 
 import pandas as pd
-import warnings
+
+import dhfcorr.definitions as definitions
 import dhfcorr.io.data_reader as reader
 import dhfcorr.selection.selection as sl
-import dhfcorr.definitions as definitions
-import glob
 
 
 def expand_array_cols(df):

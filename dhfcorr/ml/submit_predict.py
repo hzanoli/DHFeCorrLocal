@@ -1,19 +1,12 @@
 #!/usr/bin/env python3
 
 import argparse
-import os
-import dhfcorr.definitions as definitions
 import subprocess
+
+import dhfcorr.definitions as definitions
 import dhfcorr.io.data_reader as reader
+from dhfcorr.io.data_reader import check_for_folder
 from dhfcorr.submit_job import get_job_command
-
-
-def check_for_folder(folder):
-    if folder is None:
-        return
-    if not os.path.isdir(folder):
-        os.mkdir(folder)
-
 
 if __name__ == '__main__':
     print("Predicts the classes in data. All the work is submitted to the cluster.")
@@ -31,7 +24,7 @@ if __name__ == '__main__':
     parser.set_defaults(search_for_processed=True)
 
     args = parser.parse_args()
-    from dhfcorr.io.utils import batch, format_list_to_bash
+    from dhfcorr.utils import batch, format_list_to_bash
 
     processing_folder = definitions.PROCESSING_FOLDER
 
@@ -48,14 +41,14 @@ if __name__ == '__main__':
     print('Searching for preprocessed files?: ' + str(args.search_for_processed))
 
     if args.search_for_processed:
-        runs = reader.search_for_processed(runs, args.config, 'filtered')
+        runs = reader.search_for_processed(args.config, 'raw', 'filtered', 'dmeson')
 
     print('The following runs will be processed: ')
     print(runs)
 
     job_id = 0
     for run_list in batch(runs, args.nfiles):
-        job_name = 'ml_pred_' + str(job_id)
+        job_name = 'p_' + args.config + '_' + str(job_id)
 
         script = definitions.ROOT_DIR + '/ml/predict.py'
         arguments = format_list_to_bash(run_list) + ' ' + args.config

@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 
 import argparse
-import numpy as np
 import glob
 import os
-import dhfcorr.definitions as definitions
 import subprocess
+
+import numpy as np
 from tqdm import tqdm
 
+import dhfcorr.definitions as definitions
 from dhfcorr.io.data_reader import split_files, get_period
 
 

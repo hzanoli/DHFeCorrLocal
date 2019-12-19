@@ -1,16 +1,18 @@
 #!/usr/bin/env python
 
-import dhfcorr.io.data_reader as reader
-import os
-import glob
-import numpy as np
 import argparse
+import glob
+import os
+
+import numpy as np
 import pandas as pd
+from tqdm import tqdm
+
 import dhfcorr.config_yaml as configyaml
 import dhfcorr.definitions as definitions
-from tqdm import tqdm
-from dhfcorr.io.utils import batch
+import dhfcorr.io.data_reader as reader
 from dhfcorr.io.data_reader import reduce_dataframe_memory
+from dhfcorr.utils import batch
 
 
 def reduce_opt(files_to_reduce, config, yaml_file, id_job, particle, pre_filter_bkg, maximum_pt_filter):

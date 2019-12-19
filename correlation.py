@@ -1,10 +1,11 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 import seaborn as sns
 
-import dhfcorr.correlate as corr
-import dhfcorr.io.data_reader as reader
 import dhfcorr.config_yaml as confyaml
+import dhfcorr.correlate.correlate as corr
+import dhfcorr.correlate.make_pairs
+import dhfcorr.io.data_reader as reader
 
 use_built_pairs = False
 
@@ -45,9 +46,11 @@ if use_built_pairs:
 else:
     print("Building pairs")
 
-    sum_pairs = corr.build_pairs_from_lazy(df, (trig_suffix, assoc_suffix), pt_bins_trig, pt_bins_assoc,
-                                           filter_trig=lambda x: filter_dmeson(x, best_sig_cuts_dict),
-                                           **config_corr.values['correlation'])
+    sum_pairs = dhfcorr.correlate.make_pairs.build_pairs_from_lazy(df, (trig_suffix, assoc_suffix), pt_bins_trig,
+                                                                   pt_bins_assoc,
+                                                                   filter_trig=lambda x: filter_dmeson(x,
+                                                                                                       best_sig_cuts_dict),
+                                                                   **config_corr.values['correlation'])
 
     sum_pairs.to_parquet('pairs_d_hfe_hm.pkl')
 

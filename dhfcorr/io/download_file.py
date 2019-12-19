@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-import pandas as pd
 import subprocess
 import time
-import os
+
+import pandas as pd
 
 
 def get_token(code_token):
@@ -33,13 +33,8 @@ if __name__ == '__main__':
     login = pd.read_csv(args.login).iloc[0]
     user = login['user']
     code = login['code']
-    # token = subprocess.Popen('echo ' + code + ' | alien-token-init ' + user, shell=True,
-    #                         stdout=subprocess.PIPE)
-    # token.wait()
 
     get_token(code)
 
     files = pd.read_csv(args.csv_file)
     download_file_list(files['grid'], files['local'])
-
-    #os.remove(args.csv_file)

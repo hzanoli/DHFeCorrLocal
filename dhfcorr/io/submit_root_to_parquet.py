@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 
-import dhfcorr.io.data_reader as reader
-import dhfcorr.definitions as definitions
-import glob
 import argparse
-from dhfcorr.io.data_reader import get_run_number
-from dhfcorr.submit_job import get_job_command
+import glob
+
 from tqdm import tqdm
 
+import dhfcorr.definitions as definitions
+import dhfcorr.io.data_reader as reader
+from dhfcorr.io.data_reader import get_run_number
+from dhfcorr.submit_job import get_job_command
 
 if __name__ == '__main__':
     """"Save the ROOT files to parquet files. The additional features are also added.
@@ -56,7 +57,7 @@ if __name__ == '__main__':
     print(runs)
 
     import subprocess
-    from dhfcorr.io.utils import batch
+    from dhfcorr.utils import batch
 
     job_id = 0
     print()

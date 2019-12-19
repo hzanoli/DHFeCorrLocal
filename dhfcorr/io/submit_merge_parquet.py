@@ -1,10 +1,10 @@
-import dhfcorr.io.data_reader as reader
-import dhfcorr.definitions as definitions
-import glob
 import argparse
-from dhfcorr.io.data_reader import get_run_number
-from dhfcorr.submit_job import get_job_command
+
 from tqdm import tqdm
+
+import dhfcorr.definitions as definitions
+import dhfcorr.io.data_reader as reader
+from dhfcorr.submit_job import get_job_command
 
 if __name__ == '__main__':
     print('Merging parquet files for a single run/period')
@@ -31,7 +31,6 @@ if __name__ == '__main__':
     print(runs)
 
     import subprocess
-    from dhfcorr.io.utils import batch
 
     job_id = 0
     print()

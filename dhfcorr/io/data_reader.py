@@ -46,15 +46,17 @@ tree_name : dict
 
 """
 
-import warnings
-import pandas as pd
-import numpy as np
 import glob
-import dhfcorr.config_yaml as configyaml
-import dhfcorr.definitions as definitions
-import random
 import itertools
+import os
+import random
+import warnings
+
+import numpy as np
+import pandas as pd
 from tqdm import tqdm
+
+import dhfcorr.definitions as definitions
 
 storage_location = definitions.PROCESSING_FOLDER
 base_folder_name = "DHFeCorrelation_"
@@ -124,7 +126,7 @@ def save(df, configuration_name, particle, run_number, step='raw'):
         This is a unique identifier for each file. Usually the run number or period is used.
 
     step: str
-        name of the step of the process. The files will be saved to 'processing folder + step'
+        name of the step of the process_multicore. The files will be saved to 'processing folder + step'
 
     """
     import os
@@ -149,6 +151,12 @@ class LazyFileLoader:
     def __copy__(self):
         return LazyFileLoader(self.file_name, self.index, self.columns)
 
+    def __str__(self):
+        return self.file_name
+
+    def __eq__(self, other):
+        return self.file_name == other.file_name
+
     def load(self, columns=None, index=None):
 
         if columns is None:
@@ -166,43 +174,6 @@ class LazyFileLoader:
         return df
 
 
-def get_file_name(config, stage):
-    file_name = None
-    base_folder = config.values['base_folder']
-    if stage == 'raw':
-        file_name = config.values['pair_file']
-    elif stage == 'selected':
-        file_name = config.values['selected_pair_file']
-
-    return file_name
-
-
-def load_pairs(config_file, stage='raw'):
-    if isinstance(config_file, configyaml.ConfigYaml):
-        config = config_file
-    else:
-        config = configyaml.ConfigYaml(config_file)
-
-    file_name = config.values['base_folder'] + '/' + get_file_name(config, stage)
-
-    print("Reading the file: " + str(file_name))
-    data_sample = pd.read_parquet(file_name)
-
-    data_sample['APtBin'] = pd.cut(data_sample['Pt_a'], config.values['correlation']['bins_assoc'])
-    data_sample['TPtBin'] = pd.cut(data_sample['Pt_t'], config.values['correlation']['bins_trig'])
-
-    return data_sample
-
-
-def save_pairs(data_sample, config_file, stage='raw'):
-    config = configyaml.ConfigYaml(config_file)
-    file_name = get_file_name(config, stage)
-    file_name = config.values['base_folder'] + '/' + file_name
-
-    print("Saving the file to: " + str(file_name))
-    data_sample.loc[:, data_sample.columns[data_sample.dtypes != 'category']].to_parquet(file_name)
-
-
 def get_files_from_runlist(configuration_name, run_numbers, particle, step='raw'):
     location = get_location_step(configuration_name, step)
     print(location)
@@ -212,9 +183,25 @@ def get_files_from_runlist(configuration_name, run_numbers, particle, step='raw'
     return files
 
 
-def search_for_processed(current_runs, config, step):
-    runs_processed = set(get_run_numbers(config, step=step))
-    return list(set(current_runs) - runs_processed)
+def find_missing_processed_files(config, input_step, output_step, particle, run=None,
+                                 full_file_path=False):
+    files_input = {get_file_name(x) for x in get_file_list(config, particle, input_step, run)}
+    files_output = {get_file_name(x) for x in get_file_list(config, particle, output_step, run)}
+    missing_files = list(files_input - files_output)
+    if full_file_path:
+        missing_files = [find_file(config, x, input_step) for x in missing_files]
+    return missing_files
+
+
+def find_file(config, name, step):
+    path = get_path_step(config, step)
+    return glob.glob(path + '*' + name + '*')[0]
+
+
+def search_for_processed(config, input_step, output_step, particle='dmeson'):
+    files = find_missing_processed_files(config, input_step, output_step, particle)
+    runs_missing = {get_run_number(x) for x in files}
+    return list(runs_missing)
 
 
 def get_location_step(configuration, step='raw'):
@@ -232,12 +219,20 @@ def get_run_numbers(configuration, step='raw'):
     location = get_location_step(configuration, step)
     file_list = glob.glob(location + "/*.parquet")
     runs_from_files = list({get_run_number(x) for x in file_list})
+
     return runs_from_files
 
 
-def get_file_list(configuration_name, particle, step='raw'):
-    return glob.glob(definitions.PROCESSING_FOLDER + configuration_name + '/' + step + '/' + "/*" + particle +
-                     ".parquet")
+def get_path_step(configuration_name, step):
+    return definitions.PROCESSING_FOLDER + configuration_name + '/' + step + '/'
+
+
+def get_file_list(configuration_name, particle, step='raw', run=None):
+    base = get_path_step(configuration_name, step)
+    if run is None:
+        return glob.glob(base + "/*" + particle + ".parquet")
+
+    return glob.glob(base + "*" + str(run) + "*" + particle + ".parquet")
 
 
 def load(configuration_name, particle,
@@ -354,6 +349,14 @@ def get_friendly_parquet_file_name(file, particle=''):
     return file.split('/')[-1].split('.')[0][:-(len(particle) + 1)]
 
 
+def get_dataset_name_from_file(file):
+    return file.split(definitions.PROCESSING_FOLDER)[-1].split('/')[0]
+
+
+def get_file_name(x):
+    return x.split('/')[-1]
+
+
 def reduce_dataframe_memory(df):
     for col in df.columns[df.dtypes == 'float64']:
         df[col] = df[col].astype(np.float32)
@@ -383,6 +386,7 @@ def split_files(file, size, max_file_size):
     files_left = files_info.copy()
 
     large_files = files_left[files_left['size'] >= float(max_file_size)]
+
     if len(large_files) > 0:  # Add all files that have size > max size
         groups = [[x] for x in large_files.index.values]
         files_left.drop(large_files.index, inplace=True)
@@ -408,3 +412,10 @@ def split_files(file, size, max_file_size):
             groups.append(new_group)
 
     return groups
+
+
+def check_for_folder(folder):
+    if folder is None:
+        return
+    if not os.path.isdir(folder):
+        os.mkdir(folder)

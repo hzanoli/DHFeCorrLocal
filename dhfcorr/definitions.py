@@ -10,6 +10,7 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 DATA_FOLDER = '/dcache/alice/hezanoli/data/'
 PROCESSING_FOLDER = '/dcache/alice/hezanoli/data/processing/'
+TEMP = '/project/alice/users/hezanoli/temp/'  # used to save file before moving to dcache
 
 # Cluster definitions
 JOB_QUEUE = 'short7'

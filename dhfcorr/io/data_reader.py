@@ -180,32 +180,96 @@ def get_files_from_runlist(configuration_name, run_numbers, particle, step='raw'
     print(particle)
     files = [glob.glob(location + "*" + str(run) + '*_*' + str(particle) + '*.parquet') for run in run_numbers]
     files = list(itertools.chain.from_iterable(files))
+
     return files
 
 
-def find_missing_processed_files(config, input_step, output_step, particle, run=None,
+def find_missing_processed_files(dataset_name, input_step, output_step, particle, run=None,
                                  full_file_path=False):
-    files_input = {get_file_name(x) for x in get_file_list(config, particle, input_step, run)}
-    files_output = {get_file_name(x) for x in get_file_list(config, particle, output_step, run)}
+    """Find the files that were not yet processed at the output_step.
+
+    Parameters
+    ------
+    dataset_name: str
+       Name of the dataset in the local file system.
+    input_step: str
+       The input step that will be processed.
+    output_step: str
+        The output step that will be processed.
+    particle: str or None
+        The particle (or other form of identifier, e.g. event) that will be processed.
+    run: list
+        In case it is not None,  this will search only for files with this run/period names
+    full_file_path: bool
+        By default, the names of the files are returned. In case you need the full path in the file system, pass True.
+
+    Returns
+    ------
+    missing_files: list
+        The name of the files which have not yet been processed. If full_file_path is true, the whole path is returned.
+    """
+
+    files_input = {get_friendly_name(x) for x in get_file_list(dataset_name, particle, input_step, run)}
+    files_output = {get_friendly_name(x) for x in get_file_list(dataset_name, particle, output_step, run)}
+
     missing_files = list(files_input - files_output)
+
     if full_file_path:
-        missing_files = [find_file(config, x, input_step) for x in missing_files]
-    return missing_files
+        missing_files = [find_file(dataset_name, x, input_step) for x in missing_files]
+
+    return list(missing_files)
 
 
 def find_file(config, name, step):
-    path = get_path_step(config, step)
+    path = get_location_step(config, step)
     return glob.glob(path + '*' + name + '*')[0]
 
 
-def search_for_processed(config, input_step, output_step, particle='dmeson'):
-    files = find_missing_processed_files(config, input_step, output_step, particle)
+def search_for_processed(dataset_name, input_step, output_step, particle='dmeson'):
+    files = find_missing_processed_files(dataset_name, input_step, output_step, particle)
     runs_missing = {get_run_number(x) for x in files}
     return list(runs_missing)
 
 
-def get_location_step(configuration, step='raw'):
-    return definitions.PROCESSING_FOLDER + configuration + '/' + step + '/'
+def get_location_step(dataset_name, step='raw'):
+    """Returns the location of the files of a given step.
+
+     Parameters
+     ------
+     dataset_name: str
+        Name of the dataset in the local file system.
+     step: str
+        The step of the analysis.
+
+    Returns
+    ------
+    str:
+        the location of the step
+     """
+
+    if step == 'ml' or step == 'training' or step == 'test' or step == 'ml-dataset':
+        return definitions.PROCESSING_FOLDER + dataset_name + '/ml-dataset/'
+
+    if step == 'root_merged' or step == 'root':
+        return definitions.DATA_FOLDER + '/' + step + '/' + dataset_name + '/'
+
+    return definitions.PROCESSING_FOLDER + dataset_name + '/' + step + '/'
+
+
+def get_ml_dataset(dataset_name, yaml_config, pt_bin, step='train', extra_cols=None):
+    if extra_cols is None:
+        extra_cols = []
+
+    features = yaml_config.values['model_building']['features']
+    target = yaml_config.values['model_building']['target']
+    location = get_location_step(dataset_name, 'ml')
+
+    file = location + 'ml_sample_' + step + '_' + str(pt_bin) + '.parquet'
+    df = pd.read_parquet(file, columns=features + [target] + extra_cols)
+
+    df[target] = df[target] > -1
+
+    return df
 
 
 def get_periods(configuration, step='raw'):
@@ -223,36 +287,60 @@ def get_run_numbers(configuration, step='raw'):
     return runs_from_files
 
 
-def get_path_step(configuration_name, step):
-    return definitions.PROCESSING_FOLDER + configuration_name + '/' + step + '/'
+def get_file_list(configuration_name, particle=None, step='raw', run=None):
+    search_path = get_location_step(configuration_name, step)
+
+    if run is not None:
+        search_path += '*' + str(run) + "*"
+    if particle is not None:
+        search_path += particle
+    search_path += '*'
+
+    return glob.glob(search_path)
 
 
-def get_file_list(configuration_name, particle, step='raw', run=None):
-    base = get_path_step(configuration_name, step)
-    if run is None:
-        return glob.glob(base + "/*" + particle + ".parquet")
+def find_models(dataset, prefix=''):
+    """"Find models for dataset. In case more than one configuration was used, you should use the prefix to specify it.
 
-    return glob.glob(base + "*" + str(run) + "*" + particle + ".parquet")
+    Parameters
+    ---------
+    dataset: str
+        name of the dataset in the file system
+    prefix: str
+        additional value used as a prefix to save different models in the same dataset
+
+    Returns
+    ----
+    files: list
+        list of the location of the files. They are ordered by the index following 'model_', usually the pT.
+
+    """
+
+    files = glob.glob(get_location_step(dataset, 'ml') + prefix + 'model*.txt')
+    files = list(sorted(files, key=lambda name: int(name.split('/')[-1].split('_')[-1].split('.')[0])))
+
+    return files
 
 
-def load(configuration_name, particle,
+def load(dataset_name, particle,
          step='raw',
          run_number=None, columns=None,
          index=None, sample_factor=None,
          lazy=False):
+
     """Loads the dataset from the default storage location. If run_number is a list, all the runs in the list will be
     merged.
 
     Parameters
     ----------
-    configuration_name: str
-        The name of the configuration. It can be obtained by checking the name of the folder inside file_name. It should
-        start with the value set to base_folder_name. It is a parameter in the AddTask.
+    dataset_name: str
+        Name of the dataset in the local file system
 
     particle: str or list
         The particle name, such as ``electron` or ``dmeson``. The same name that was used to save it.
 
-    step
+    step: str
+        Step of the analysis.
 
     run_number: str, list or None
         This is a unique identifier for each file. Usually the run number is used.
@@ -292,13 +380,21 @@ def load(configuration_name, particle,
         if len(particle) == 1 and len(columns) != 1:
             columns = [columns]
 
-    location = definitions.PROCESSING_FOLDER + configuration_name + "/" + step
+    for x in index:
+        for col_part in columns:
+            if x not in col_part:
+                col_part.append(x)
+
+    location = get_location_step(dataset_name, step)
+
+    # Add index in case it is not in columns
+    print(columns)
 
     if run_number is None:
         file_list = glob.glob(location + "/*" + str(particle[0]) + ".parquet")
         run_list = [get_friendly_parquet_file_name(x, particle[0]) for x in file_list]
         run_list.sort()
-        return load(configuration_name, particle, step, run_list, columns, index, sample_factor, lazy)
+        return load(dataset_name, particle, step, run_list, columns, index, sample_factor, lazy)
     else:
         file_list = [[location + r"/" + str(run) + '_' + str(x) + '.parquet' for x in particle] for run in run_number]
 
@@ -325,7 +421,7 @@ def load(configuration_name, particle,
                 df = pd.read_parquet(file_particle, columns=col)
                 data_sets.append(df)
             except OSError:
-                warnings.warn('It is not possible to load the files with run number = ' + str(x))
+                warnings.warn('It is not possible to load the file ' + str(f))
                 return None
 
     if len(data_sets) < 0:
@@ -353,8 +449,19 @@ def get_dataset_name_from_file(file):
     return file.split(definitions.PROCESSING_FOLDER)[-1].split('/')[0]
 
 
+def get_particle_from_file(file):
+    return file.split('/')[-1].split('.')[0].split('_')[-1]
+
+
 def get_file_name(x):
     return x.split('/')[-1]
+
+
+def get_friendly_name(x):
+    if '.root' in x:
+        return x.split('/')[-1][:-5]
+    else:
+        return ''.join([a + '_' for a in x.split('/')[-1].split('.')[0].split('_')[:-1]])[:-1]
 
 
 def reduce_dataframe_memory(df):

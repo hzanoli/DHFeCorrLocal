@@ -1,89 +1,41 @@
 import argparse
-import io
+import glob
 import os
-import subprocess
-import sys
-import time
 
-import pandas as pd
-
-from dhfcorr.io.download_file import get_token
+from dhfcorr.cluster import wait_jobs_to_finish, get_token
 
 
-def job_status(job_name_pattern):
-    user = os.environ['USER']
-    cols = ['Job ID', 'Username', 'Queue', 'Jobname', 'SessID', 'NDS', 'TSK', 'ReqMemory', 'ReqTime', 'Status', 'Time']
-    command = 'qstat -u ' + user + ' | grep ' + job_name_pattern
-    try:
-        result = pd.read_csv(
-            io.StringIO(subprocess.run(command, shell=True, stdout=subprocess.PIPE).stdout.decode('utf-8')),
-            delim_whitespace=True, header=None)
-    except pd.errors.EmptyDataError:
-        return None
-    if len(result.columns) != 0:
-        result.columns = cols
-        return result
-    return None
-
-
-def is_job_complete(job_name_pattern):
-    job_status_df = job_status(job_name_pattern)
-    if job_status_df is None:
-        return True
-    uncompleted_jobs = job_status_df[job_status_df['Status'] != 'C']
-    if len(uncompleted_jobs) > 0:
-        return False
-    return True
-
-
-def get_n_jobs(job_name_pattern):
-    job_status_df = job_status(job_name_pattern)
-    if job_status_df is None:
-        return 0
-    uncompleted_jobs = job_status_df[job_status_df['Status'] != 'C']
-    return len(uncompleted_jobs)
-
-
-def wait_jobs_to_finish(step_name, job_name_pattern):
-    n_jobs_running = get_n_jobs(job_name_pattern)
-    len_message = len('\rWaiting for: ' + step_name + ' [running ' + str(n_jobs_running) + ' jobs]')
-
-    while n_jobs_running > 0:
-        sys.stdout.write('\rWaiting for: ' + step_name + ' [running ' + str(n_jobs_running) + ' jobs]')
-        time.sleep(1)
-
-    message_over = '\r' + step_name + ' done!'
-    blank_space = str(' ' * (len_message - len(message_over)))[:len_message]
-
-    sys.stdout.write(message_over + blank_space)
+def clean_job_submitted(pattern):
+    files = glob.glob(pattern)
+    for f in files:
+        os.remove(f)
 
 
 if __name__ == '__main__':
-    print("Downloading and converting the files.")
-    print("This script will call multiple other scripts to get the job done.")
-    print()
+    print("Downloading files from grid and converting to parquet.")
 
     parser = argparse.ArgumentParser()
 
     parser.add_argument("user", help='User on grid')
     parser.add_argument("code", help='Code to unlock the certificate')
     parser.add_argument("train_name", help='Name of the train (eg. HFCJ_pp')
-
+    parser.add_argument("destination", help="Destination of the file that will be downloaded. It is always added to "
+                                            "the basic definitions from the definitions.py file")
+    parser.add_argument("configuration_root", help="Name of the configuration in the ROOT files.")
     parser.add_argument("-r", "--train_runs", help='Number of the run in the Lego train system', nargs='+',
                         required=True)
 
-    parser.add_argument("destination", help="Destination of the file that will be downloaded. It is always added to "
-                                            "the basic definitions from the definitions.py file")
+    parser.add_argument('-t', "--target_sizeGB", default=1., type=float, help='Maximum file size for merged files.')
 
-    parser.add_argument('-t', "--target_sizeGB", default=0.1, help='Maximum file size for merged files.')
-
-    parser.add_argument("-n", "--n_runs", help='Number of the runs to be processed at the same job', default=1)
+    parser.add_argument("-n", "--n_files", help='Number of the files to be processed at the same job', default=50)
+    parser.add_argument('-nr', "--n_runs", type=int, help='Number of runs per job for parquet conversion.',
+                        default=10)
 
     args = parser.parse_args()
     print()
-    print('First, lets download the files')
+    print('Downloading files')
 
-    get_token(args.code)
+    get_token(args.code, args.user)
 
     from dhfcorr.io.submit_download_grid import submit_download_grid
 
@@ -91,9 +43,49 @@ if __name__ == '__main__':
     while n_files_to_download > 0:
         n_files_to_download = submit_download_grid(args.user, args.code, args.train_name, args.destination,
                                                    args.train_runs, args.n_files)
-        wait_jobs_to_finish('download files', args.destination + '_d_')
+        wait_jobs_to_finish(' download files', args.destination + '_d_')
 
-    print('Finished downloading the files')
+    print('Finished downloading the files!')
     print()
 
+    # Cleaning the files used to submit
+    clean_job_submitted(args.destination + '_d_*')
+    os.remove('login.csv')
+
     print('Merging the ROOT files')
+
+    from dhfcorr.io.submit_merge_root_files import submit_merge_root_files
+
+    n_runs_to_convert = 1
+    while n_runs_to_convert > 0:
+        n_runs_to_convert = submit_merge_root_files(args.destination, args.target_sizeGB, True, args.n_runs)
+        wait_jobs_to_finish('merge files', args.destination + '_merge_')
+
+    print('Finished merging root files!')
+    print()
+
+    # Cleaning the files used to submit
+    clean_job_submitted(args.destination + '_merge_*')
+
+    print('Converting to parquet')
+
+    from dhfcorr.io.submit_root_to_parquet import submit_root_to_parquet
+
+    max_trials = 3
+    current_trial = 0
+    n_files_to_convert = 1
+    while n_files_to_convert > 0 and current_trial < max_trials:
+        n_files_to_convert = submit_root_to_parquet(args.destination, args.configuration_root, args.n_runs)
+        wait_jobs_to_finish('convert files', args.destination + '_conv_')
+        current_trial += 1
+
+    if current_trial == max_trials:
+        print("It was not possible to convert all the ROOT files to parquet. This can happen sometimes there are no "
+              "candidates in the file. Double check it to be sure.")
+
+    print('Converted all the files!')
+    print()
+
+    clean_job_submitted(args.destination + '_conv_*')
+
+    print('All the steps are finished.')

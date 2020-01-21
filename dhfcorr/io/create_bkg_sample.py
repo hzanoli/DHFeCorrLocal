@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
-import dhfcorr.config_yaml as configyaml
-import dhfcorr.definitions as definitions
+import argparse
+
 import numpy as np
 import pandas as pd
-import argparse
-import os
+
+import dhfcorr.config_yaml as configyaml
 import dhfcorr.io.data_reader as reader
 
 if __name__ == '__main__':
@@ -24,13 +24,8 @@ if __name__ == '__main__':
     yaml_config = args.yaml_config
     d_cuts = configyaml.ConfigYaml(yaml_config)
 
-    processing_folder = definitions.PROCESSING_FOLDER + args.config_name
-    folder_to_save = processing_folder + '/ml-dataset/'
+    folder_to_save = reader.get_location_step('ml')
     mc_mean = pd.read_pickle(folder_to_save + '/mc_mean_sigma.pkl')
-
-    if not os.path.isdir(folder_to_save):
-        os.mkdir(folder_to_save)
-
 
     def filter_bkg(df, mc_shape, n_sigma=4.0):
         pt_bin = df.name

@@ -39,7 +39,7 @@ reduce_data:
              'EventNumber', 'ID', 'IsParticleCandidate']
 
 pre_filter_ml:
-  probability_min: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+  probability_min: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0]
   cols_to_keep: ['RunNumber', 'EventNumber', 'ID', 'IsParticleCandidate', 'Pt', 'Phi', 'Eta', 'InvMass',
                  'Probability', 'IDDaughters0', 'IDDaughters1']
 
@@ -51,27 +51,46 @@ model_building:
              'DecayLengthXY', 'NSigmaTPCDaughters00', 'NSigmaTPCDaughters01', 'NSigmaTPCDaughters10',
              'NSigmaTPCDaughters11', 'NSigmaTOFDaughters00', 'NSigmaTOFDaughters01',
              'NSigmaTOFDaughters10', 'NSigmaTOFDaughters11', 'DecayLength', 'PID']
+
   target: 'CandidateType'
+  queue: 'gpu7'
 
   model_parameters:
-    seed: 1313
-    tree_method: 'auto'
-    max_depth: 3
-    stopping_metric: 'logloss'
-    stopping_rounds: 4
-    stopping_tolerance: 0.001
-    score_tree_interval: 50
-    nfolds: 5
-    keep_cross_validation_predictions: False
-    ntrees: 6000
-    min_child_weight: 3
-    sample_rate: 0.8
-    col_sample_rate: 0.6
-    learn_rate: 0.1
+    device: 'gpu'
+    objective: 'binary'
+    feature_fraction: 0.7
+    first_metric_only: False
+    learning_rate: 0.1
+
+  train_parameters:
+    num_boost_round: 3000
+
+  cv_parameters:
+    seed: 13
+    stratified: True
+    metrics: ['auc', 'rmse', 'binary_logloss', 'binary_error']
+    early_stopping_rounds: 30
+
+
+  #  model_parameters:
+  #    seed: 1313
+  #    tree_method: 'auto'
+  #    max_depth: 3
+  #    stopping_metric: 'logloss'
+  #    stopping_rounds: 4
+  #    stopping_tolerance: 0.001
+  #    score_tree_interval: 50
+  #    nfolds: 5
+  #    keep_cross_validation_predictions: False
+  #    ntrees: 6000
+  #    min_child_weight: 3
+  #    sample_rate: 0.8
+  #    col_sample_rate: 0.6
+  #    learn_rate: 0.1
+
 
   # Cluster configuration
-  max_time_cluster: '12:10:00'
-  queue: 'gpu7'
+
 
 
 selection_ml:

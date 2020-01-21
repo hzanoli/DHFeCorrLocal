@@ -52,7 +52,7 @@ def correlation_dmeson(df_pairs, n_sigma_sig=2., n_sigma_bkg_min=4., n_sigma_bkg
     e_in_this_pt = reduce_to_single_particle(df_pairs, suffixes[1])
 
     try:
-        fit = make_histo_and_fit_inv_mass(d_in_this_pt, suffix=suffixes[0], **kwargs['inv_mass'])
+        fit = make_histo_and_fit_inv_mass(d_in_this_pt, suffix=suffixes[0])
     except RuntimeError:
         warnings.warn("Skipping value due to fit failure.")
         return pd.DataFrame(None, columns=['InvMassFit', 'DMesonCorr', 'SignalRegCorr', 'NSignal', 'NSignalErr',

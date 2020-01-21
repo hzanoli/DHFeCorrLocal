@@ -9,8 +9,8 @@ import pandas as pd
 from tqdm import tqdm
 
 import dhfcorr.definitions as definitions
+from dhfcorr.cluster import get_job_command
 from dhfcorr.io.download_file import download_file
-from dhfcorr.submit_job import get_job_command
 
 """Tools to download from GRID to local cluster. 
 The cluster must have a working copy of alien (alien_cp and alien_token-init are used).
@@ -33,7 +33,7 @@ Check submit_download_grid.py --help to a description of each parameter.
 def submit_download_job(name, login, csv_file):
     commands = get_job_command(name, definitions.ROOT_DIR + '/io/download_file.py',
                                login + ' ' + csv_file)
-    subprocess.run(commands, shell=True)
+    subprocess.run(commands, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def get_friendly_file_name(file_name, train_name):
@@ -65,9 +65,8 @@ def get_run_number_from_path(path):
     return list_path[5]
 
 
-def download_train_opt(train_name, run_number, local_folder,
-                       login, n_batches=100,
-                       file_name='AnalysisResults.root'):
+def download_train_opt(train_name, run_number, local_folder, login, n_batches=100,
+                       file_name='AnalysisResults.root', n_trains=0):
 
     files = find_files_from_train(run_number, train_name, file_name=file_name)
     files_downloaded = glob.glob(local_folder + '/*.root')
@@ -77,15 +76,20 @@ def download_train_opt(train_name, run_number, local_folder,
     print("Train run number: " + run_number)
 
     print('Number of files in this path: ' + str(len(files)))
+
     friendly_names = [get_friendly_file_name(x, train_name) for x in files]
     friendly_names_downloaded = [x.split('/')[-1].split('.root')[0] for x in files_downloaded]
-    print('Number of files in already downloaded path: ' + str(len(friendly_names_downloaded)))
+
+    if len(files) < len(friendly_names_downloaded) and n_trains == 1:
+        print('It is normal to have more downloaded files than found files in case you are downloading multiple trains '
+              'to the same folder. IF YOU ARE NOT DOWNLOADING MULTIPLE TRAINS, YOU MIGHT BE SAVING TO A FOLDER WITH '
+              'OTHER FILES.')
     files_to_download = [(files[x], friendly_names[x])
                          for x in range(len(files)) if friendly_names[x] not in friendly_names_downloaded]
     files = [x[0] for x in files_to_download]
     friendly_names = [x[1] for x in files_to_download]
 
-    print('So I will download:' + str(len(files)))
+    print('I will download:' + str(len(files)))
     size_jobs = len(files) / n_batches
     print("Number of jobs that will be submitted (approx.): " + str(size_jobs))
 
@@ -95,13 +99,7 @@ def download_train_opt(train_name, run_number, local_folder,
     for grid_file, local_file in zip(batch(files, n_batches), batch(friendly_names, n_batches)):
         local_file = [local_folder + '/' + x + '.root' for x in local_file]
         name_job = local_folder_name + '_d_' + str(run_number) + str('_') + str(current_job)
-
-        print("Saving grid files and destinations on csv file: ", name_job + '.csv')
-
         pd.DataFrame({'grid': grid_file, 'local': local_file}).to_csv(name_job + '.csv')
-
-        print("Submitting job " + str(name_job))
-
         submit_download_job(name_job, login, os.path.join(os.getcwd(), name_job + '.csv'))
         current_job = current_job + 1
 
@@ -131,7 +129,7 @@ def find_output_dirs(env_file):
     return output_dirs
 
 
-def find_files_from_train(train_run, train_name, pwg='PWGHF', file_name='AnalysisResults.root'):
+def find_files_from_train(train_run, train_name, file_name='AnalysisResults.root', pwg='PWGHF'):
     # Find the env file of the train
     env_folder = "/alice/cern.ch/user/a/alitrain/" + str(pwg) + "/" + str(train_name) + "/"
     env_file_pattern = str(train_run) + "_20*/env.sh"
@@ -147,8 +145,8 @@ def find_files_from_train(train_run, train_name, pwg='PWGHF', file_name='Analysi
     print(env_file[0])
     download_file(env_file[0], 'temp_env.sh')
     output_dirs = find_output_dirs('temp_env.sh')
-
     print("The following datasets were found: ")
+
     for x in output_dirs:
         print(x)
 
@@ -185,11 +183,11 @@ def submit_download_grid(user, code, train_name, destination,
 
     total_files = list()
 
-    for run, i in zip(args.train_runs, range(len(args.train_runs))):
-        print('-> -> -> -> -> ->- > -> -> -> -> -> -> -> ->- > -> ->')
-        print("         Downloading train run: " + str(run))
-        print('-> -> -> -> -> ->- > -> -> -> -> -> -> -> ->- > -> ->')
-        n = download_train_opt(train_name, run, local_folder_path, '~/login.csv', n_batches=n_files)
+    for run, i in zip(train_runs, range(len(train_runs))):
+        print()
+        print("Downloading train run: " + str(run))
+        n = download_train_opt(train_name, run, local_folder_path, '~/login.csv', n_batches=n_files,
+                               n_trains=len(train_runs))
         total_files.append(n)
 
     return sum(total_files)
@@ -218,8 +216,8 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    token = subprocess.Popen('echo ' + args.code + ' | alien-token-init ' + args.user, shell=True,
-                             stdout=subprocess.PIPE)
-    token.wait()
+    from dhfcorr.cluster import get_token
+
+    get_token()
 
     submit_download_grid(args.user, args.code, args.train_name, args.destination, args.train_runs, args.n_files)

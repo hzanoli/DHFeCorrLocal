@@ -97,18 +97,22 @@ def plot_inv_mass_fit(fit, ax=None, **kwargs):
     return ax
 
 
-def fit_inv_mass_root(histogram, range_fit, sig_func, bkg_func, fix_mean=None, fix_sigma=None, **kwargs):
+def fit_inv_mass_root(histogram, range_fit, sig_func, bkg_func, fix_mean=None, fix_sigma=None):
     """"Fits the invariant mass distribution using AliHFInvMassFitter.
 
     Parameters
     ----------
+
     histogram : ROOT.TH1
         The histogram that will be fitted.
-    config_inv_mass : dict
-        Values used to configure the AliHFInvMassFitter. Should containt: range (the range that the fit will be
-        performed), bkg_func and sig_func(the function used to fit the data, as defined in AliHFInvMassFitter.h)
+    range_fit: list
+        The mininum and maximum value of the fir
     fix_mean: None or float
         In case it is not None, the fit will fix the mean to this value.
+    sig_func:
+        Signal function to be used in the fit. Must be in of AliHFInvMassFitter::ETypeOfSgn
+    bkg_func:
+        Background function to be used in the fit. Must be in of AliHFInvMassFitter::ETypeOfBkg
     fix_sigma: None or float
         In case it is not None, the fit will fix the standard deviation to this value.
 
@@ -164,7 +168,8 @@ def fit_inv_mass_root(histogram, range_fit, sig_func, bkg_func, fix_mean=None, f
     return fit_mass
 
 
-def make_histo_and_fit_inv_mass(df, n_bins='auto', min_hist=1.67, max_hist=2.06, suffix='', **kwargs):
+def make_histo_and_fit_inv_mass(df, n_bins='auto', min_hist=1.67, max_hist=2.06, range_fit=(1.7, 2.05), suffix='',
+                                sig_func='kGaus', bkg_func='kPol2', fix_mean=None, fix_sigma=None):
     inv_mass = df['InvMass' + suffix]
     if 'Weight' not in df.columns:
         weight = np.ones(len(inv_mass))
@@ -180,7 +185,7 @@ def make_histo_and_fit_inv_mass(df, n_bins='auto', min_hist=1.67, max_hist=2.06,
     histogram.Sumw2()
     rnp.fill_hist(histogram, inv_mass, weights=weight)
 
-    fit = fit_inv_mass_root(histogram, **kwargs)
+    fit = fit_inv_mass_root(histogram, range_fit, sig_func, bkg_func, fix_mean=fix_mean, fix_sigma=fix_sigma)
     return fit
 
 
@@ -241,7 +246,7 @@ def get_n_bkg_sidebands(fit, n_sigma_min, n_sigma_max):
 
 def fit_inv_mass(df, suffix, **kwargs):
     d_in_this_pt = reduce_to_single_particle(df, suffix)
-    return make_histo_and_fit_inv_mass(d_in_this_pt, suffix=suffix, **kwargs)
+    return make_histo_and_fit_inv_mass(d_in_this_pt, suffix=suffix)
 
 
 def fit_d_meson_inv_mass(config_file_name=None, suffix='_t'):

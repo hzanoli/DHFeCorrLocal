@@ -4,7 +4,7 @@ from tqdm import tqdm
 
 import dhfcorr.definitions as definitions
 import dhfcorr.io.data_reader as reader
-from dhfcorr.submit_job import get_job_command
+from dhfcorr.cluster import get_job_command
 
 if __name__ == '__main__':
     print('Merging parquet files for a single run/period')
@@ -42,10 +42,10 @@ if __name__ == '__main__':
 
         arguments_d = dataset_name + ' -s filtered -p dmeson -r ' + str(run)
         command_d = get_job_command(job_name + '_d', script_path, arguments_d)
-        subprocess.run(command_d, shell=True, stdout=subprocess.PIPE)
+        subprocess.run(command_d, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         args_ele_ev = dataset_name + ' -s raw -p electron event -r ' + str(run)
         command_ele_ev = get_job_command(job_name + '_e', script_path, args_ele_ev)
-        subprocess.run(command_ele_ev, shell=True, stdout=subprocess.PIPE)
+        subprocess.run(command_ele_ev, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         job_id = job_id + 1

@@ -9,7 +9,7 @@ from dhfcorr.config_yaml import ConfigYaml
 from dhfcorr.correlate.correlation_utils import compute_angular_differences
 
 
-def prepare_single_particle_df(df, bins, suffix=''):
+def prepare_single_particle_df(df, bins):
     """"Preprocessor before calculating the pairs. Takes place 'inplace' (changes df).
     Changes the names of the columns by appending the suffix.
     Adds values for weights in case they are not available.
@@ -93,6 +93,13 @@ def build_pairs(trigger, associated, suffixes=('_t', '_a'), identifier=('RunNumb
 
         if remove_same_id:
             correlation = correlation[correlation['ID' + suffixes[0]] != correlation['ID' + suffixes[1]]]
+            # Check for daughters
+            share_tracks = ((correlation['IDDaughters0' + suffixes[0]] == correlation['IDDaughters0' + suffixes[1]]) |
+                            (correlation['IDDaughters1' + suffixes[0]] == correlation['IDDaughters0' + suffixes[1]]) |
+                            (correlation['IDDaughters0' + suffixes[0]] == correlation['IDDaughters1' + suffixes[1]]) |
+                            (correlation['IDDaughters1' + suffixes[0]] == correlation['IDDaughters0' + suffixes[1]]))
+
+            correlation = correlation[~share_tracks]
 
     return correlation
 
@@ -104,7 +111,7 @@ def process_lazy_worker(df_list, suffixes, pt_bins_trig, pt_bins_assoc, filter_t
     assoc_suffix = suffixes[1]
     for df in df_list:
         trig_df = df[0].load()
-        prepare_single_particle_df(trig_df, pt_bins_trig, trig_suffix)
+        prepare_single_particle_df(trig_df, pt_bins_trig)
 
         if filter_trig is not None:
             trig_df = trig_df.groupby(['PtBin'], group_keys=False).apply(filter_trig)
@@ -115,7 +122,7 @@ def process_lazy_worker(df_list, suffixes, pt_bins_trig, pt_bins_assoc, filter_t
             assoc_df = trig_df
         else:
             assoc_df = df[1].load()
-            prepare_single_particle_df(assoc_df, pt_bins_assoc, assoc_suffix)
+            prepare_single_particle_df(assoc_df, pt_bins_assoc)
 
             if filter_assoc is not None:
                 assoc_df = assoc_df.groupby(['PtBin'], group_keys=False).apply(filter_assoc)
@@ -149,15 +156,15 @@ def build_pairs_from_lazy(df_list, suffixes, pt_bins_trig, pt_bins_assoc, filter
     return correlation
 
 
-def make_pairs(file_list, id, config=None, is_dd=True):
+def make_pairs(file_list, job_id, config=None):
     config_name = reader.get_dataset_name_from_file(file_list[0][0])
+    trigger_name = reader.get_particle_from_file(file_list[0][0])
+    assoc_name = reader.get_particle_from_file(file_list[0][0])
+
     folder_to_save = definitions.PROCESSING_FOLDER + config_name + '/pairs/'
-    file_to_save = folder_to_save
-    if is_dd:
-        file_to_save += 'dd'
-    else:
-        file_to_save += 'de'
-    file_to_save += '_pairs_' + str(id) + '.parquet'
+    reader.check_for_folder(folder_to_save)
+
+    file_to_save = folder_to_save + trigger_name + '_' + assoc_name + '_pairs_' + str(job_id) + '.parquet'
 
     if isinstance(file_list, str):  # it will be loaded from a file
         file_list = pd.read_csv(file_list).values.tolist()
@@ -171,7 +178,11 @@ def make_pairs(file_list, id, config=None, is_dd=True):
     def filter_trig(x):
         return sl.filter_df_prob(x, sl.build_cut_dict(pt_bins_trig, cuts_pre_filter))
 
-    if is_dd:
+    is_same_particle = False
+    if trigger_name == assoc_name:
+        is_same_particle = True
+
+    if is_same_particle:
         cols_assoc = cols_trig
         filter_assoc = None
         pt_bins_assoc = pt_bins_trig
@@ -185,7 +196,8 @@ def make_pairs(file_list, id, config=None, is_dd=True):
               reader.LazyFileLoader(x[1]), ['RunNumber', 'EventNumber'], cols_assoc)
              for x in file_list]
 
-    pairs = build_pairs_from_lazy(files, ('_t', '_a'), pt_bins_trig, pt_bins_assoc, filter_trig, filter_assoc, 1, is_dd)
+    pairs = build_pairs_from_lazy(files, ('_t', '_a'), pt_bins_trig, pt_bins_assoc, filter_trig, filter_assoc, 1,
+                                  is_same_particle)
     pairs.to_parquet(file_to_save)
 
 
@@ -197,6 +209,7 @@ if __name__ == '__main__':
     parser.add_argument("file_list", help='csv file with the locations of trigger and associated files')
     parser.add_argument("id", help='Number of the process, used to saved the produced files')
     parser.add_argument('-c' "--config", default=None, help='Yaml file with the configuration.')
-    parser.add_argument('-d' "--process_dd", default=None, help='Yaml file with the configuration.')
 
     args = parser.parse_args()
+
+    make_pairs(args.file_list, args.id, args.config)

@@ -1,4 +1,15 @@
 def batch(sequence, n=1):
+    """Divide sequence into a list of lists, where each element of the new list contains n elementes.
+
+    Parameters
+    ----------
+    sequence: iterable
+        The values that will be combined
+
+    n: int
+        The number of elements that should be combined
+
+    """
     if n == 0:
         yield sequence
 

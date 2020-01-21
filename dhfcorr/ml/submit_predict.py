@@ -5,8 +5,8 @@ import subprocess
 
 import dhfcorr.definitions as definitions
 import dhfcorr.io.data_reader as reader
+from dhfcorr.cluster import get_job_command
 from dhfcorr.io.data_reader import check_for_folder
-from dhfcorr.submit_job import get_job_command
 
 if __name__ == '__main__':
     print("Predicts the classes in data. All the work is submitted to the cluster.")

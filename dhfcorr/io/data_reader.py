@@ -34,18 +34,8 @@ Than the data can be saved in the parquet file using
 and later loaded using:
     electron = dr.load("loose", "electron", 265534)
 
-Attributes
-----------
-storage_location: str
-    Location used to save the parquet files.
-base_folder_name: str
-    Base name used in the folders inside the ROOT File.
-tree_name : dict
-    The name of the trees for the electrons and D mesons in the ROOT file.
-
 
 """
-
 import glob
 import itertools
 import os
@@ -58,25 +48,16 @@ from tqdm import tqdm
 
 import dhfcorr.definitions as definitions
 
-storage_location = definitions.PROCESSING_FOLDER
-base_folder_name = "DHFeCorrelation_"
 
-
-def set_base_folder_name(name):
-    global base_folder_name
-    base_folder_name = name
-
-
-def read_root_file(file_name, configuration_name, particles=('electron', 'dmeson'), **kwargs):
+def read_root_file(file_name, configuration_name, particles=('electron', 'dmeson'), base_folder_name='DHFeCorrelation_',
+                   backend='uproot', return_dict=False, **kwargs):
     """Read the root file with name file_name (should include the path to the file) and configuration named
     configuration_name. Returns DataFrame with the contents of the associated ROOT.TTree.
 
     Parameters
     ----------
-    file_name : str or list with str
+    file_name : str
         Name of the file that contains the ROOT TTree. Should contain the path to the file.
-        In case multiple files are provided in a list, all of them are loaded. In this case it is recommended to use
-        the kwarg chunksize with the number of rows (chunksize=2500000 is recommended for 16GB of RAM)
 
     configuration_name: str
         The name of the configuration. It can be obtained by checking the name of the folder inside file_name. It should
@@ -85,20 +66,48 @@ def read_root_file(file_name, configuration_name, particles=('electron', 'dmeson
     particles: tuple
         name of the trees that contain the particles
 
+    base_folder_name: str
+        name of the folder
+
+    backend: str
+        Package used to convert root to pandas DataFrames. 'uproot' does not require a ROOT instalation, while
+        'root_pandas' requires it.
+
     **kwargs:
         parameters to be forwarded to root_pandas.read_root
 
     Returns
     -------
-    data_frames : list(pd.DataFrame)
-        DataFrame with the data of each tree
+    data_frames : list[pd.DataFrame] or pd.DataFrame
+        DataFrame with the data of each tree. If only one particle name was passed, a single dataframe is returned
 
     """
-    from root_pandas import read_root
-
     folder_name = base_folder_name + configuration_name
 
-    data_frames = [read_root(file_name, folder_name + '/' + x, **kwargs) for x in particles]
+    if isinstance(particles, str):
+        particles = [particles]
+
+    if backend == 'uproot':
+        try:
+            import uproot
+        except ModuleNotFoundError:
+            raise ModuleNotFoundError("No uproot found and backend='uproot', please install it. ")
+
+        file = uproot.open(file_name)
+        data_frames = [file.get(folder_name + '/' + x).pandas.df(flatten=False) for x in particles]
+
+    elif backend == 'root_pandas':
+        try:
+            from root_pandas import read_root
+        except ModuleNotFoundError:
+            raise ModuleNotFoundError("No root_pandas found and backend='root_pandas', please install it. ")
+        data_frames = [read_root(file_name, folder_name + '/' + x, **kwargs) for x in particles]
+
+    else:
+        raise ValueError('The backend passed is invalid. Please use uproot or root_pandas.')
+
+    if return_dict:
+        return {x: df for x, df in zip(particles, data_frames)}
 
     if len(data_frames) == 1:
         data_frames = data_frames[0]
@@ -106,7 +115,7 @@ def read_root_file(file_name, configuration_name, particles=('electron', 'dmeson
     return data_frames
 
 
-def save(df, configuration_name, particle, run_number, step='raw'):
+def save(df, dataset_name, particle=None, run_number=None, step='raw', index=False, file_name=None):
     """Saves the dataset into a parquet file in the default storage location. The directory is created in case it does
     not exist.
 
@@ -115,7 +124,7 @@ def save(df, configuration_name, particle, run_number, step='raw'):
     df : pd.DataFrame
         The DataFrame that will be saved.
 
-    configuration_name: str
+    dataset_name: str
         The name of the configuration. It can be obtained by checking the name of the folder inside file_name. It should
         start with the value set to base_folder_name. It is a parameter in the AddTask.
 
@@ -126,20 +135,25 @@ def save(df, configuration_name, particle, run_number, step='raw'):
         This is a unique identifier for each file. Usually the run number or period is used.
 
     step: str
-        name of the step of the process_multicore. The files will be saved to 'processing folder + step'
+        Name of the step. The files will be saved to 'processing folder + step'
+
+    index: bool
+        Set to include/exclude the index in the file saved.
 
     """
-    import os
 
-    location = definitions.PROCESSING_FOLDER + configuration_name + "/" + step
+    location = get_location_step(dataset_name, step)
+    check_for_folder(location)
+    check_for_folder(definitions.PROCESSING_FOLDER + dataset_name)
 
-    if not os.path.isdir(definitions.PROCESSING_FOLDER + configuration_name):
-        os.mkdir(definitions.PROCESSING_FOLDER + configuration_name)
-    if not os.path.isdir(location):
-        os.mkdir(location)
+    if file_name is None:
+        if run_number is None or particle is None:
+            raise ValueError('You should provide at file_name or run_number and particle')
+        name_to_save = location + "/" + str(run_number) + '_' + particle + '.parquet'
+    else:
+        name_to_save = location + file_name
 
-    name_to_save = location + "/" + str(run_number) + '_' + particle + '.parquet'
-    df.to_parquet(name_to_save, index=False)
+    df.to_parquet(name_to_save, index=index)
 
 
 class LazyFileLoader:
@@ -199,7 +213,7 @@ def find_missing_processed_files(dataset_name, input_step, output_step, particle
     particle: str or None
         The particle (or other form of identifier, e.g. event) that will be processed.
     run: list
-        In case it is not None,  this will search only for files with this run/period names
+        In case it is not None, this will search only for files with this run/period names
     full_file_path: bool
         By default, the names of the files are returned. In case you need the full path in the file system, pass True.
 
@@ -210,6 +224,8 @@ def find_missing_processed_files(dataset_name, input_step, output_step, particle
     """
 
     files_input = {get_friendly_name(x) for x in get_file_list(dataset_name, particle, input_step, run)}
+    if len(files_input) == 0:
+        raise ValueError('The input step has no files.')
     files_output = {get_friendly_name(x) for x in get_file_list(dataset_name, particle, output_step, run)}
 
     missing_files = list(files_input - files_output)
@@ -258,7 +274,7 @@ def get_location_step(dataset_name, step='raw'):
 
 def get_ml_dataset(dataset_name, yaml_config, pt_bin, step='train', extra_cols=None):
     if extra_cols is None:
-        extra_cols = []
+        extra_cols = yaml_config.values['model_building']['extra_cols']
 
     features = yaml_config.values['model_building']['features']
     target = yaml_config.values['model_building']['target']
@@ -270,6 +286,13 @@ def get_ml_dataset(dataset_name, yaml_config, pt_bin, step='train', extra_cols=N
     df[target] = df[target] > -1
 
     return df
+
+
+def get_cv_results(dataset_name, prefix=''):
+    files = glob.glob(get_location_step(dataset_name, 'ml') + prefix + 'cv*.')
+    files = sorted(files, key=lambda name: int(name.split('/')[-1].split('_')[-1].split('.')[0]))
+    dfs = [pd.read_csv(x) for x in files]
+    return dfs
 
 
 def get_periods(configuration, step='raw'):
@@ -299,7 +322,7 @@ def get_file_list(configuration_name, particle=None, step='raw', run=None):
     return glob.glob(search_path)
 
 
-def find_models(dataset, prefix=''):
+def find_models(dataset, compiled=False, prefix=''):
     """"Find models for dataset. In case more than one configuration was used, you should use the prefix to specify it.
 
     Parameters
@@ -308,6 +331,8 @@ def find_models(dataset, prefix=''):
         name of the dataset in the file system
     prefix: str
         additional value used as a prefix to save different models in the same dataset
+    compiled: bool
+        if True, looks for compiled treelite models
 
     Returns
     ----
@@ -316,10 +341,13 @@ def find_models(dataset, prefix=''):
 
     """
 
-    files = glob.glob(get_location_step(dataset, 'ml') + prefix + 'model*.txt')
-    files = list(sorted(files, key=lambda name: int(name.split('/')[-1].split('_')[-1].split('.')[0])))
+    extension = 'txt'
+    if compiled:
+        extension = 'so'
+    files = glob.glob(get_location_step(dataset, 'ml') + prefix + 'model*.' + extension)
+    files = sorted(files, key=lambda name: int(name.split('/')[-1].split('_')[-1].split('.')[0]))
 
-    return files
+    return list(files)
 
 
 def load(dataset_name, particle,
@@ -327,7 +355,6 @@ def load(dataset_name, particle,
          run_number=None, columns=None,
          index=None, sample_factor=None,
          lazy=False):
-
     """Loads the dataset from the default storage location. If run_number is a list, all the runs in the list will be
     merged.
 
@@ -445,7 +472,9 @@ def get_friendly_parquet_file_name(file, particle=''):
     return file.split('/')[-1].split('.')[0][:-(len(particle) + 1)]
 
 
-def get_dataset_name_from_file(file):
+def get_dataset_name_from_file(file, step='raw'):
+    if step == 'root_merged' or step == 'root':
+        return file.split(definitions.DATA_FOLDER + '/' + step + '/')[-1].split('/')[0]
     return file.split(definitions.PROCESSING_FOLDER)[-1].split('/')[0]
 
 

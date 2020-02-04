@@ -1,6 +1,4 @@
-base_folder: 'hmv0'
-pair_file: 'pairs.parquet'
-selected_pair_file: 'selected.parquet'
+identifier: ['RunNumber', 'EventNumber']
 
 correlation:
   bins_assoc: [1.0, 6.0]
@@ -22,9 +20,8 @@ correlation:
 
 inv_mass:
   range_fit: [1.7,2.05]
-  # defined in AliHFInvMassFitter.h
-  sig_func: kGaus
-  bkg_func: kPol2
+  sig_func: kGaus # defined in AliHFInvMassFitter.h
+  bkg_func: kPol2 # defined in AliHFInvMassFitter.h
 
 correlation_qa_style:
   kwargs_plot:
@@ -51,7 +48,7 @@ model_building:
              'DecayLengthXY', 'NSigmaTPCDaughters00', 'NSigmaTPCDaughters01', 'NSigmaTPCDaughters10',
              'NSigmaTPCDaughters11', 'NSigmaTOFDaughters00', 'NSigmaTOFDaughters01',
              'NSigmaTOFDaughters10', 'NSigmaTOFDaughters11', 'DecayLength', 'PID']
-
+  extra_cols: ['IsPrompt', 'IsD', 'IsParticle', 'IsParticleCandidate', 'Pt']
   target: 'CandidateType'
   queue: 'gpu7'
 
@@ -70,27 +67,6 @@ model_building:
     stratified: True
     metrics: ['auc', 'rmse', 'binary_logloss', 'binary_error']
     early_stopping_rounds: 30
-
-
-  #  model_parameters:
-  #    seed: 1313
-  #    tree_method: 'auto'
-  #    max_depth: 3
-  #    stopping_metric: 'logloss'
-  #    stopping_rounds: 4
-  #    stopping_tolerance: 0.001
-  #    score_tree_interval: 50
-  #    nfolds: 5
-  #    keep_cross_validation_predictions: False
-  #    ntrees: 6000
-  #    min_child_weight: 3
-  #    sample_rate: 0.8
-  #    col_sample_rate: 0.6
-  #    learn_rate: 0.1
-
-
-  # Cluster configuration
-
 
 
 selection_ml:

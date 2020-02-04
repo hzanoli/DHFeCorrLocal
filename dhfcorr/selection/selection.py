@@ -4,9 +4,10 @@ import numpy as np
 import pandas as pd
 
 import dhfcorr.config_yaml as configyaml
+from dhfcorr.definitions import ROOT_DIR
 
 
-class Cuts(object):
+class RectangularSelection(object):
 
     def feature_names(self):
         """Get the features names that have a selection cut defined"""
@@ -27,7 +28,8 @@ class Cuts(object):
 
     def __init__(self, name_file, particle='D0'):
         """Default constructor. yaml_file should come from the class CutsYaml. The particle is set as Default to D0 """
-        yaml_config = configyaml.ConfigYaml(name_file)
+        yaml_config = configyaml.ConfigYaml(name_file, default_file=ROOT_DIR + "/config/config_retangular.yaml")
+
         try:
             d_meson_cuts = yaml_config.values[particle]['cuts']
         except KeyError as key_error:
@@ -62,13 +64,15 @@ class Cuts(object):
         self.cut_df['PtBin'] = pd.cut(mid_pt, self.pt_bins)
         self.cut_df.set_index('PtBin', inplace=True)
 
-        self.part_dep_cuts = tuple(yaml_config.values[particle]['particle_dependent_variables'])
         self.particle_mass = float(yaml_config.values[particle]['particle_mass'])
         self.particle_name = str(yaml_config.values[particle]['particle_name'])
         self.features_absolute = tuple(yaml_config.values[particle]['features_abs'])
 
+    def predict(self, data):
+        return filter_in_pt_bins(data, self, return_data=False)
 
-def apply_cuts_pt(df, cuts, pt_bin=None, select_in_pt_bins=True):
+
+def apply_cuts_pt(df, cuts, pt_bin=None, select_in_pt_bins=True, return_data=True):
     """Apply the selection cuts defined in 'cuts' to df.
     col_dict should containt the dict that maps the keys used in the selection class to the one in df.
     Range features are not yet implemented.
@@ -88,7 +92,7 @@ def apply_cuts_pt(df, cuts, pt_bin=None, select_in_pt_bins=True):
                 pass
 
     selection_pt = cuts.selection_for_ptbin(pt_bin)
-    filtered = (df[df.columns[0]] == df[df.columns[0]])  # always returns true, used to started all as true
+    filtered = pd.Series(np.full(len(df), True, dtype=bool), index=df.index)
 
     for feat in cuts.min_features:
         col = df[feat]
@@ -111,10 +115,13 @@ def apply_cuts_pt(df, cuts, pt_bin=None, select_in_pt_bins=True):
             selected_condition = df[feat] == bool(selection_pt.loc[feat])
             filtered = filtered & selected_condition
 
-    return df[filtered]
+    if return_data:
+        return df[filtered]
+
+    return filtered
 
 
-def filter_in_pt_bins(df, cuts):
+def filter_in_pt_bins(df, cuts, return_data=True):
     """General warper to perform the selection of particles in df described in cuts."""
 
     # cut the dataframe in pt bins.
@@ -124,7 +131,8 @@ def filter_in_pt_bins(df, cuts):
         raise ValueError('The following columns are specified in the cuts, but are not present in the DataFrame: \n'
                          '' + str([x for x in cuts.feature_names() if x not in df.columns]))
 
-    pass_cuts = df.groupby(by=pt_bins).apply(lambda x: apply_cuts_pt(x, cuts))
+    pass_cuts = df.groupby(by=pt_bins, group_keys=False, as_index=False).apply(
+        lambda x: apply_cuts_pt(x, cuts, return_data=return_data))
 
     return pass_cuts
 

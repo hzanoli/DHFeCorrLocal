@@ -3,7 +3,7 @@ import warnings
 
 import pandas as pd
 
-import dhfcorr.io.data_reader as reader
+import dhfcorr.io.data_reader as dr
 import dhfcorr.selection.selection as sl
 
 
@@ -21,32 +21,33 @@ def preprocess(file_name, file_identifier, configuration_name, configuration_nam
     print("Current file: " + file_name)
 
     try:
-        electron, d_meson, events = reader.read_root_file(file_name, configuration_name, particle_list)
+        dfs = dr.read_root_file(file_name, configuration_name, particle_list, return_dict=True)
     except OSError:
         warnings.warn('File ' + file_name + ' has one or more invalid trees (likely empty')
         return None
 
-    d_meson = expand_array_cols(d_meson)
-    sl.build_additional_features_dmeson(d_meson)
-    sl.build_additional_features_electron(electron)
+    if 'dmeson' in particle_list:
+        dfs['dmeson'] = expand_array_cols(dfs['dmeson'])
 
-    reader.reduce_dataframe_memory(d_meson)
-    reader.reduce_dataframe_memory(electron)
-    reader.reduce_dataframe_memory(events)
+    if 'electron' in particle_list:
+        sl.build_additional_features_electron(dfs['electron'])
+
+    for key, value in dfs.items():
+        dr.reduce_dataframe_memory(value)
 
     if save:
         if configuration_name_save is None:
             configuration_name_save = configuration_name
 
-        reader.save(electron, configuration_name_save, particle_list[0], file_identifier)
-        reader.save(d_meson, configuration_name_save, particle_list[1], file_identifier)
-        reader.save(events, configuration_name_save, particle_list[2], file_identifier)
+        for key, value in dfs.items():
+            dr.save(value, configuration_name_save, key, file_identifier)
 
     else:
-        return electron, d_meson, events
+        return [value for key, value in dfs.items()]
 
 
-def convert_root_to_parquet(configuration_name_root, local_dataset_name, file_list_root):
+def convert_root_to_parquet(configuration_name_root, local_dataset_name, file_list_root,
+                            particle_list=('electron', 'dmeson', 'event')):
     file_list_root = list(pd.read_csv(file_list_root)['file'])
     print("The following files will be processed: " + str(file_list_root))
     print("With configuration name on ROOT: " + configuration_name_root)
@@ -56,7 +57,7 @@ def convert_root_to_parquet(configuration_name_root, local_dataset_name, file_li
     print()
     for root_file in file_list_root:
         identifier = root_file.split('/')[-1].split('.root')[0]
-        preprocess(root_file, identifier, configuration_name_root, local_dataset_name)
+        preprocess(root_file, identifier, configuration_name_root, local_dataset_name, particle_list=particle_list)
 
 
 if __name__ == '__main__':
@@ -67,6 +68,8 @@ if __name__ == '__main__':
                                                    'value used in the task on GRID. Check the tree name.')
     parser.add_argument("dataset_name", help="Name of the local dataset.")
     parser.add_argument("file_list", help="csv file with the files that will be processed.")
+    parser.add_argument("-p", "--particle_list", nargs='*', required=False, default=[('electron', 'dmeson', 'event')],
+                        help="csv file with the files that will be processed.")
 
     args = parser.parse_args()
 

@@ -3,65 +3,64 @@
 import argparse
 import subprocess
 
+import pandas as pd
+from tqdm import tqdm
+
 import dhfcorr.definitions as definitions
-import dhfcorr.io.data_reader as reader
+import dhfcorr.io.data_reader as dr
 from dhfcorr.cluster import get_job_command
 from dhfcorr.io.data_reader import check_for_folder
+from dhfcorr.utils import batch
+
+
+def split_submit_job(files, script_path, job_name_pattern, n_files, additional_argumets='', test=True):
+    print(files)
+    if test:
+        files = files[:10]
+        n_files = 2
+
+    job_id = 0
+
+    for file_list in tqdm(batch(files, n_files), total=int(len(files) / n_files) + 1,
+                          desc='Submitting jobs: '):
+        job_name = job_name_pattern + str(job_id)
+        pd.DataFrame({'file': file_list}).to_csv(job_name + '.csv')
+        arguments = ' ' + job_name + '.csv ' + additional_argumets
+        command = get_job_command(job_name, script_path, arguments)
+        subprocess.run(command, shell=True)
+
+        job_id = job_id + 1
+
+    return len(files)
+
+
+def submit_predict(dataset_name, particle, n_files, prefix=None, yaml_file=None):
+    check_for_folder(dr.get_location_step(dataset_name, 'consolidated'))
+    files = dr.find_missing_processed_files(dataset_name, 'raw', 'consolidated', particle, full_file_path=True)
+    print(files)
+
+    additional_arguments = ''
+    if prefix is not None:
+        additional_arguments += ' --prefix ' + str(prefix)
+    if yaml_file is not None:
+        additional_arguments += ' --yaml_file ' + str(yaml_file)
+
+    n_files_to_process = split_submit_job(files, definitions.ROOT_DIR + '/ml/predict.py', dataset_name + '_p_', n_files,
+                                          additional_arguments)
+
+    return n_files_to_process
+
 
 if __name__ == '__main__':
     print("Predicts the classes in data. All the work is submitted to the cluster.")
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("config", help="Name of the configuration")
+    parser.add_argument("dataset_name", help="Name of the configuration")
     parser.add_argument("--particle", default='dmeson', help="Name of the particle")
-    parser.add_argument("--config_to_save", default=None, help="Configuration name that will be used to be saved. If "
-                                                               "None is provided, the name will be the same")
     parser.add_argument("--yaml_file", default=None, help='YAML file with the configurations of the analysis.')
     parser.add_argument("--prefix", default=None, help='Prefix when saving the model files')
-    parser.add_argument('-n', "--nfiles", type=int, help='Number of runs per job.', default=1)
-    parser.add_argument('-c', '--continue_previous', dest='search_for_processed', action='store_true')
-    parser.add_argument('-d', '--delete_previous', dest='search_for_processed', action='store_false')
-    parser.set_defaults(search_for_processed=True)
+    parser.add_argument('-n', "--nfiles", type=int, help='Number of runs per job.', default=20)
 
     args = parser.parse_args()
-    from dhfcorr.utils import batch, format_list_to_bash
 
-    processing_folder = definitions.PROCESSING_FOLDER
-
-    check_for_folder(processing_folder + args.config)
-    check_for_folder(processing_folder + args.config + '/filtered/')
-
-    if args.config_to_save is not None:
-        check_for_folder(processing_folder + args.config_to_save)
-        check_for_folder(processing_folder + args.config_to_save + '/filtered/')
-
-    runs = reader.get_run_numbers(args.config)
-
-    print('Total number of runs: ' + str(len(runs)))
-    print('Searching for preprocessed files?: ' + str(args.search_for_processed))
-
-    if args.search_for_processed:
-        runs = reader.search_for_processed(args.config, 'raw', 'filtered', 'dmeson')
-
-    print('The following runs will be processed: ')
-    print(runs)
-
-    job_id = 0
-    for run_list in batch(runs, args.nfiles):
-        job_name = 'p_' + args.config + '_' + str(job_id)
-
-        script = definitions.ROOT_DIR + '/ml/predict.py'
-        arguments = format_list_to_bash(run_list) + ' ' + args.config
-
-        if args.yaml_file is not None:
-            arguments += ' --yaml_file ' + args.yaml_file
-        if args.prefix is not None:
-            arguments += ' --prefix ' + args.prefix
-        if args.config_to_save is not None:
-            arguments += ' --config_to_save ' + args.config_to_save
-
-        command = get_job_command(job_name, script, arguments)
-        print()
-        print("Submitting job " + str(job_id))
-        subprocess.run(command, shell=True)
-        job_id = job_id + 1
+    submit_predict(args.dataset_name, args.particle, args.nfiles, args.prefix)

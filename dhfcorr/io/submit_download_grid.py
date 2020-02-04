@@ -86,6 +86,7 @@ def download_train_opt(train_name, run_number, local_folder, login, n_batches=10
               'OTHER FILES.')
     files_to_download = [(files[x], friendly_names[x])
                          for x in range(len(files)) if friendly_names[x] not in friendly_names_downloaded]
+
     files = [x[0] for x in files_to_download]
     friendly_names = [x[1] for x in files_to_download]
 

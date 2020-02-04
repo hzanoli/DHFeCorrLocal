@@ -16,3 +16,6 @@ TEMP = '/project/alice/users/hezanoli/temp/'  # used to save file before moving 
 JOB_QUEUE = 'short7'
 JOB_QUEUE_GPU = 'gpu7'
 CLUSTER_MEMORY = 8
+
+# treelite
+TOOLCHAIN = 'gcc'

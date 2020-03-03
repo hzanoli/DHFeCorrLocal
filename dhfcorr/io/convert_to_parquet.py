@@ -17,11 +17,11 @@ def expand_array_cols(df):
 
 
 def preprocess(file_name, file_identifier, configuration_name, configuration_name_save=None, save=True,
-               particle_list=('electron', 'dmeson', 'event')):
+               particle_list=('electron', 'dmeson', 'event'), n_threads=None):
     print("Current file: " + file_name)
 
     try:
-        dfs = dr.read_root_file(file_name, configuration_name, particle_list, return_dict=True)
+        dfs = dr.read_root_file(file_name, configuration_name, particle_list, return_dict=True, n_threads=n_threads)
     except OSError:
         warnings.warn('File ' + file_name + ' has one or more invalid trees (likely empty')
         return None

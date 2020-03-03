@@ -50,7 +50,7 @@ import dhfcorr.definitions as definitions
 
 
 def read_root_file(file_name, configuration_name, particles=('electron', 'dmeson'), base_folder_name='DHFeCorrelation_',
-                   backend='uproot', return_dict=False, **kwargs):
+                   backend='uproot', return_dict=False, n_threads=None, **kwargs):
     """Read the root file with name file_name (should include the path to the file) and configuration named
     configuration_name. Returns DataFrame with the contents of the associated ROOT.TTree.
 
@@ -94,7 +94,11 @@ def read_root_file(file_name, configuration_name, particles=('electron', 'dmeson
             raise ModuleNotFoundError("No uproot found and backend='uproot', please install it. ")
 
         file = uproot.open(file_name)
-        data_frames = [file.get(folder_name + '/' + x).pandas.df(flatten=False) for x in particles]
+        executor = None
+        if n_threads is not None:
+            from concurrent.futures import ThreadPoolExecutor
+            executor = ThreadPoolExecutor(n_threads)
+        data_frames = [file.get(folder_name + '/' + x).pandas.df(flatten=False, executor=executor) for x in particles]
 
     elif backend == 'root_pandas':
         try:
@@ -407,15 +411,14 @@ def load(dataset_name, particle,
         if len(particle) == 1 and len(columns) != 1:
             columns = [columns]
 
-    for x in index:
-        for col_part in columns:
-            if x not in col_part:
-                col_part.append(x)
+    # Add index in case it is not in columns
+    if columns is not None and index is not None:
+        for x in index:
+            for col_part in columns:
+                if x not in col_part:
+                    col_part.append(x)
 
     location = get_location_step(dataset_name, step)
-
-    # Add index in case it is not in columns
-    print(columns)
 
     if run_number is None:
         file_list = glob.glob(location + "/*" + str(particle[0]) + ".parquet")
@@ -423,7 +426,8 @@ def load(dataset_name, particle,
         run_list.sort()
         return load(dataset_name, particle, step, run_list, columns, index, sample_factor, lazy)
     else:
-        file_list = [[location + r"/" + str(run) + '_' + str(x) + '.parquet' for x in particle] for run in run_number]
+        file_list = [glob.glob(location + "/*" + str(run) + '*' + str(x) + ".parquet")
+                     for x in particle for run in run_number]
 
     if sample_factor is not None:
         if sample_factor > 1.:
@@ -441,8 +445,12 @@ def load(dataset_name, particle,
 
         return lazy_list
 
+    if columns is None:
+        columns = [None for _ in particle]
+
     data_sets = list()
     for f in tqdm(file_list):
+
         for file_particle, col in zip(f, columns):
             try:
                 df = pd.read_parquet(file_particle, columns=col)
